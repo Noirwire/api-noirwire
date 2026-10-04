@@ -1,0 +1,362 @@
+[
+  {
+    "symbol": "NVDAx",
+    "name": "NVIDIA",
+    "mint": "Xsc9qvGR1efVDFGLrVsmkzv3qi45LTBjeUKSPmx9qEh",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "SPYx",
+    "name": "SP500",
+    "mint": "XsoCS1TfEyfFhfvj8EtZ528L3CaKBDBRqRapnBbDF2W",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "fund",
+    "logo": true
+  },
+  {
+    "symbol": "SPCXx",
+    "name": "SpaceX",
+    "mint": "Xs3oZwbHvqis4NYcf4YKWmEia2eC84wSiVrcYcTqpH8",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "QQQx",
+    "name": "Nasdaq",
+    "mint": "Xs8S1uUs1zvS2p7iwtsG3b6fkhpvmwz4GYU3gWAmWHZ",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "fund",
+    "logo": true
+  },
+  {
+    "symbol": "CRCLx",
+    "name": "Circle",
+    "mint": "XsueG8BtpquVJX9LVLLEGuViXUungE6WmK5YZ3p3bd1",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "TSLAx",
+    "name": "Tesla",
+    "mint": "XsDoVfqeBukxuZHWhdvWHBhgEHjGNst4MLodqsJHzoB",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "MSTRx",
+    "name": "MicroStrategy",
+    "mint": "XsP7xzNPvEHS1m6qfanPUGjNmdnmsLKEoNAnHjdxxyZ",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "COINx",
+    "name": "Coinbase",
+    "mint": "Xs7ZdzSHLU9ftNJsii5fCeJhoRWSC32SQGzGQtePxNu",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "GLDx",
+    "name": "Gold",
+    "mint": "Xsv9hRk1z5ystj9MhnA7Lq4vjSsLwzL2nxrwmwtD3re",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "fund",
+    "logo": true
+  },
+  {
+    "symbol": "MSFTx",
+    "name": "Microsoft",
+    "mint": "XspzcW1PRtgf6Wj92HCiZdjzKCyFekVD8P5Ueh3dRMX",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "HOODx",
+    "name": "Robinhood",
+    "mint": "XsvNBAYkrDRNhA7wPHQfX3ZUXZyZLdnCQDfHZ56bzpg",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "METAx",
+    "name": "Meta",
+    "mint": "Xsa62P5mvPszXL1krVUnU5ar38bBSVcWAB6fmPCo5Zu",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "GOOGLx",
+    "name": "Alphabet",
+    "mint": "XsCPL9dNWBMvFtTmwcCA5v3xWPSMEBCszbQdiLLq6aN",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "GMEx",
+    "name": "Gamestop",
+    "mint": "Xsf9mBktVB9BSU5kf4nHxPq5hCBJ2j2ui3ecFGxPRGc",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "AAPLx",
+    "name": "Apple",
+    "mint": "XsbEhLAtcf6HdfpFZ5xEMdqW8nfAvcsP5bdudRLJzJp",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "STRCx",
+    "name": "Strategy PP Variable",
+    "mint": "Xs78JED6PFZxWc2wCEPspZW9kL3Se5J7L5TChKgsidH",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "PLTRx",
+    "name": "Palantir",
+    "mint": "XsoBhf2ufR8fTyNSjqfU71DYGaE6Z3SUGAidpzriAA4",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "MCDx",
+    "name": "McDonald's",
+    "mint": "XsqE9cRRpzxcGKDXj1BJ7Xmg4GRhZoyY1KpmGSxAWT2",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "AMZNx",
+    "name": "Amazon.com",
+    "mint": "Xs3eBt7uRfJX8QUs4suhyU8p2M6DoUDrJyWBa8LLZsg",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "KOx",
+    "name": "Coca-Cola",
+    "mint": "XsaBXg8dU5cPM6ehmVctMkVqoiRG2ZjMo1cyBJ3AykQ",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "INTCx",
+    "name": "Intel",
+    "mint": "XshPgPdXFRWB8tP1j82rebb2Q9rPgGX37RuqzohmArM",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "BRK.Bx",
+    "name": "Berkshire Hathaway",
+    "mint": "Xs6B6zawENwAbWVi7w92rjazLuAr5Az59qgWKcNb45x",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "DFDVx",
+    "name": "DFDV",
+    "mint": "Xs2yquAgsHByNzx68WJC55WHjHBvG9JsMB7CWjTLyPy",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "TQQQx",
+    "name": "TQQQ",
+    "mint": "XsjQP3iMAaQ3kQScQKthQpx9ALRbjKAjQtHg6TFomoc",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "fund",
+    "logo": true
+  },
+  {
+    "symbol": "AVGOx",
+    "name": "Broadcom",
+    "mint": "XsgSaSvNSqLTtFuyWPBhK9196Xb9Bbdyjj4fH3cPJGo",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "TSMx",
+    "name": "TSMC",
+    "mint": "XsafvsGtzFqqHgTnA3aPC83EAMkacU5mcGtcSayhpVV",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "VIDAx",
+    "name": "Vida Global",
+    "mint": "XsfCC9VL4DamVGNgdJpfLXB3sBVa158Gbx8sh7NzmTk",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "AMDx",
+    "name": "AMD",
+    "mint": "XsXcJ6GZ9kVnjqGsjBnktRcuwMBmvKWh8S93RefZ1rF",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "WMTx",
+    "name": "Walmart",
+    "mint": "Xs151QeqTCiuKtinzfRATnUESM2xTU6V9Wy8Vy538ci",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "ORCLx",
+    "name": "Oracle",
+    "mint": "XsjFwUPiLofddX5cWFHW35GCbXcSu1BCUGfxoQAQjeL",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "PGx",
+    "name": "Procter & Gamble",
+    "mint": "XsYdjDjNUygZ7yGKfQaB6TxLh2gC6RRjzLtLAGJrhzV",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "MUx",
+    "name": "Micron Technology",
+    "mint": "XsQLZycSZ7QnBBdBXQaTbQdiUcbRqjNJgyBGAMzhHav",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "JPMx",
+    "name": "JPMorgan Chase",
+    "mint": "XsMAqkcKsUewDrzVkait4e5u4y8REgtyS7jWgCpLV2C",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "MAx",
+    "name": "Mastercard",
+    "mint": "XsApJFV9MAktqnAc6jqzsHVujxkGm9xcSUffaBoYLKC",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "PEPx",
+    "name": "PepsiCo",
+    "mint": "Xsv99frTRUeornyvCfvhnDesQDWuvns1M852Pez91vF",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "URAx",
+    "name": "Global X Uranium ETF",
+    "mint": "Xsq9sEQjYiUTSZ55RrbHAzVfz8HotwFGrqgxkgiv4LB",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "fund",
+    "logo": true
+  },
+  {
+    "symbol": "AAOIx",
+    "name": "Applied Optoelectronics",
+    "mint": "XsGHwSbPaUJu6r5dtJLHXkXenPgCQf4Sx2hb4e2sbCZ",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "BXx",
+    "name": "Blackstone",
+    "mint": "XsYtTeabUTJnkxWrHZUChwcKpNq6BbqPbWs9ZgLk4Xa",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "DELLx",
+    "name": "Dell Technologies Inc.",
+    "mint": "Xsu7Tc5J2fVUE4H5vYAiSr34cvLJeCsYPMjAYnayQn6",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  },
+  {
+    "symbol": "SMRx",
+    "name": "NuScale Power Corporation",
+    "mint": "XsrwdnwLHjVnyy7fgE2Pdwjp3czEm73jPjkSC5xzUBw",
+    "decimals": 8,
+    "issuer": "xStocks",
+    "kind": "company",
+    "logo": true
+  }
+]
