@@ -5,7 +5,7 @@ import { answer, refusal } from "../common/core/answer.js";
 import type { Cached } from "../common/core/cached.js";
 import type { RouteLimits } from "../common/core/quota.js";
 import { Admission } from "../common/http/admission.js";
-import { errorResponse, jsonResponse, SessionRequired } from "../common/http/api-docs.js";
+import { ApiErrors, ok } from "../common/http/api-docs.js";
 import type { SessionRequest } from "../common/http/caller.js";
 import { send } from "../common/http/send.js";
 import { LIVE_PRICES } from "../tokens.js";
@@ -34,28 +34,62 @@ export class PricesController {
       "",
       "**Contains wallet addresses: no.** The request carries nothing, and the same answer goes to everyone. **Received by:** Jupiter, which is asked for the listed mints by this server on its own schedule, not per caller, so it learns nothing about who asked.",
       "",
-      "**Refused:** any query string (404): the route takes none.",
+      "**Refused:** a query string (400), as on every route.",
       "",
       "**Quotas (per minute):** 120 per session, 2,400 per address, 30,000 in total.",
     ].join("\n"),
   })
-  @jsonResponse(200, "The prices, by symbol. An asset the index did not price is absent.", {
-    prices: {
-      summary: "Prices",
-      value: {
-        prices: { SOL: { usd: 150.12, change24h: -1.2 }, NVDAx: { usd: 764.15, change24h: 0.33 } },
+  @ok(
+    "The prices, by symbol. An asset the index did not price is absent.",
+    {
+      type: "object",
+      required: ["prices"],
+      properties: {
+        prices: {
+          type: "object",
+          description: "One entry per priced asset, keyed by its symbol (`SOL`, `NVDAx`, ...).",
+          additionalProperties: {
+            type: "object",
+            required: ["usd", "change24h"],
+            properties: {
+              usd: {
+                type: "number",
+                description:
+                  "US dollars for one displayed token: one SOL, or one share-equivalent of a tracker.",
+              },
+              change24h: {
+                type: "number",
+                description:
+                  "The change in price over the last 24 hours, in percent (1.5 is +1.5%).",
+              },
+            },
+          },
+        },
+      },
+    },
+    {
+      prices: {
+        summary: "Prices",
+        value: {
+          prices: {
+            SOL: { usd: 150.12, change24h: -1.2 },
+            NVDAx: { usd: 764.15, change24h: 0.33 },
+          },
+        },
+      },
+    },
+    { age: true },
+  )
+  @ApiErrors({
+    session: true,
+    own: {
+      502: {
+        why: "The price index could not be read at all.",
+        codes: { upstream_failed: "Index unavailable" },
       },
     },
   })
-  @errorResponse(404, "The request carries a query string.", {
-    not_found: "Query string present",
-  })
-  @errorResponse(502, "The price index could not be read at all.", {
-    upstream_failed: "Index unavailable",
-  })
-  @SessionRequired()
   async get(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
-    if (req.originalUrl.includes("?")) return send(res, refusal("not_found"));
     const admitted = await this.admission.forSession(req, {
       route: "prices",
       limits: PRICES_LIMITS,

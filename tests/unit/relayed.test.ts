@@ -48,6 +48,12 @@ describe("reading a relayer-paid transaction", () => {
     expect(read(genuine.firstDeposit()).opens?.mint.equals(LEND_RECEIPT_MINT)).toBe(true);
     expect(read(genuine.withdraw()).action).toEqual({ kind: "withdraw", amountRaw: 7_000_000n });
     expect(read(genuine.withdrawToNoAccount()).opens?.mint.equals(USDC)).toBe(true);
+    // The whole position taken back: the same accounts as a withdrawal, counted in shares.
+    expect(read(genuine.redeem()).action).toEqual({ kind: "redeem", amountRaw: 6_543_210n });
+    const toNew = read(genuine.redeemToNoAccount());
+    expect(toNew.action).toEqual({ kind: "redeem", amountRaw: 6_543_210n });
+    expect(toNew.opens?.mint.equals(USDC)).toBe(true);
+    expect(toNew.opens?.owner.equals(owner)).toBe(true);
     expect(read(genuine.openHolding())).toMatchObject({ action: { kind: "open" } });
   });
 

@@ -93,6 +93,7 @@ const LEND_VAULT = {
 const LEND_DISCRIMINATOR = {
   deposit: [0xf2, 0x23, 0xc6, 0x89, 0x52, 0xe1, 0xf2, 0xb6],
   withdraw: [0xb7, 0x12, 0x46, 0x9c, 0x94, 0x6d, 0xa1, 0x22],
+  redeem: [0xb8, 0x0c, 0x56, 0x95, 0x46, 0xc4, 0x61, 0xe1],
 };
 
 export type Hostile = Record<string, [() => VersionedTransaction, string]>;
@@ -140,7 +141,11 @@ export function scenario() {
   }
 
   /** Jupiter Lend's instruction as its API builds it, for `depositor`. */
-  function lend(kind: "deposit" | "withdraw", amountRaw = 7_000_000n, depositor = owner) {
+  function lend(
+    kind: "deposit" | "withdraw" | "redeem",
+    amountRaw = 7_000_000n,
+    depositor = owner,
+  ) {
     const data = Buffer.alloc(16);
     Buffer.from(LEND_DISCRIMINATOR[kind]).copy(data);
     data.writeBigUInt64LE(amountRaw, 8);
@@ -153,7 +158,7 @@ export function scenario() {
       keys: [
         { pubkey: depositor, isSigner: true, isWritable: true },
         ...own.map((pubkey) => ({ pubkey, isSigner: false, isWritable: true })),
-        ...LEND_VAULT[kind].map((key) => ({
+        ...LEND_VAULT[kind === "deposit" ? "deposit" : "withdraw"].map((key) => ({
           pubkey: new PublicKey(key),
           isSigner: false,
           isWritable: false,
@@ -188,6 +193,9 @@ export function scenario() {
     withdraw: () => compile([lend("withdraw"), payment(PLAIN_FEE)]),
     withdrawToNoAccount: () =>
       compile([open(cash, owner, USDC), lend("withdraw"), payment(OPENING_FEE)]),
+    redeem: () => compile([lend("redeem", 6_543_210n), payment(PLAIN_FEE)]),
+    redeemToNoAccount: () =>
+      compile([open(cash, owner, USDC), lend("redeem", 6_543_210n), payment(OPENING_FEE)]),
     openHolding: () =>
       compile([
         open(
@@ -438,6 +446,73 @@ export function scenario() {
       },
       "action",
     ],
+    "a redemption of the fee payer's own position": [
+      () => compile([lend("redeem", 1_000n, relayer.publicKey), payment(PLAIN_FEE)]),
+      "fee_payer_named",
+    ],
+    "a redemption of nothing": [() => compile([lend("redeem", 0n), payment(PLAIN_FEE)]), "action"],
+    "a redemption with a deposit's accounts": [
+      () => {
+        const instruction = lend("deposit");
+        instruction.data = lend("redeem").data;
+        return compile([instruction, payment(PLAIN_FEE)]);
+      },
+      "action",
+    ],
+    "a redemption out of somebody else's receipt account": [
+      () => {
+        const instruction = lend("redeem");
+        instruction.keys[1].pubkey = ataFor(LEND_RECEIPT_MINT, Keypair.generate().publicKey);
+        return compile([instruction, payment(PLAIN_FEE)]);
+      },
+      "action",
+    ],
+    "a redemption paid out to somebody else's account": [
+      () => {
+        const instruction = lend("redeem");
+        instruction.keys[2].pubkey = ataFor(USDC, Keypair.generate().publicKey);
+        return compile([instruction, payment(PLAIN_FEE)]);
+      },
+      "action",
+    ],
+    "a redemption with one vault account swapped": [
+      () => {
+        const instruction = lend("redeem");
+        instruction.keys[9].pubkey = Keypair.generate().publicKey;
+        return compile([instruction, payment(PLAIN_FEE)]);
+      },
+      "action",
+    ],
+    "a redemption with an extra account": [
+      () => {
+        const instruction = lend("redeem");
+        instruction.keys.push({
+          pubkey: Keypair.generate().publicKey,
+          isSigner: false,
+          isWritable: true,
+        });
+        return compile([instruction, payment(PLAIN_FEE)]);
+      },
+      "action",
+    ],
+    "a redemption with trailing data": [
+      () => {
+        const instruction = lend("redeem");
+        instruction.data = Buffer.concat([instruction.data, Buffer.alloc(1)]);
+        return compile([instruction, payment(PLAIN_FEE)]);
+      },
+      "action",
+    ],
+    "a redemption that opens the receipt account": [
+      () =>
+        compile([
+          open(ataFor(LEND_RECEIPT_MINT, owner), owner, LEND_RECEIPT_MINT),
+          lend("redeem"),
+          payment(OPENING_FEE),
+        ]),
+      "account_creation",
+    ],
+    "a redemption with no payment": [() => compile([lend("redeem"), sendUsdc(1n)]), "payment"],
     "another Lend instruction": [
       () => {
         const instruction = lend("deposit");

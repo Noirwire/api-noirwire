@@ -107,6 +107,12 @@ export const LEND_RECEIPT_MINT = new PublicKey("9BEcn9aPEmhSPbPQeFGjidRiEKki46fV
  * and Earn is paid for the other way meanwhile.
  */
 const LEND_DATA_LEN = 16;
+/**
+ * The program's `redeem`: a withdrawal stated in receipt shares, which is
+ * how a whole position is taken back with nothing left behind. Its accounts
+ * are a withdrawal's.
+ */
+const LEND_REDEEM = [0xb8, 0x0c, 0x56, 0x95, 0x46, 0xc4, 0x61, 0xe1];
 const LEND_SHAPES = {
   deposit: {
     discriminator: [0xf2, 0x23, 0xc6, 0x89, 0x52, 0xe1, 0xf2, 0xb6],
@@ -180,6 +186,8 @@ export type RelayedAction =
       amountRaw: bigint;
     }
   | { kind: "deposit" | "withdraw"; amountRaw: bigint }
+  /** Taking the whole position back: `amountRaw` is the receipt shares redeemed, not USDC. */
+  | { kind: "redeem"; amountRaw: bigint }
   /** Nothing but opening the portfolio's own account for a tracker, ahead of a first buy. */
   | { kind: "open" };
 
@@ -261,9 +269,11 @@ function lendAction(
 ): RelayedAction | null {
   const { accounts, data } = instruction;
   if (!instruction.programId.equals(LEND_PROGRAM) || data.length !== LEND_DATA_LEN) return null;
-  for (const kind of ["deposit", "withdraw"] as const) {
-    const shape = LEND_SHAPES[kind];
-    if (!bytesEqual(data.subarray(0, 8), Uint8Array.from(shape.discriminator))) continue;
+  for (const kind of ["deposit", "withdraw", "redeem"] as const) {
+    // A redemption is a withdrawal counted in shares: the same accounts, another instruction.
+    const shape = LEND_SHAPES[kind === "redeem" ? "withdraw" : kind];
+    const discriminator = kind === "redeem" ? LEND_REDEEM : shape.discriminator;
+    if (!bytesEqual(data.subarray(0, 8), Uint8Array.from(discriminator))) continue;
     const expected = [
       portfolio,
       ...shape.own(usdc).map((mint) => ata(mint, portfolio)),
@@ -300,7 +310,8 @@ function sendAction(
  * Whether `opened` is the one account `action` may have opened for it:
  * - a send, the recipient's account for the token sent, whoever they are;
  * - a deposit, this portfolio's account for the receipt it is paid in;
- * - a withdrawal, this portfolio's USDC account, which it is paid into;
+ * - a withdrawal or a redemption, this portfolio's USDC account, which it
+ *   is paid into;
  * - nothing else at all, this portfolio's own account for a listed tracker.
  */
 function opensFor(
@@ -341,7 +352,7 @@ function opensFor(
  *   account, on its own authority, into the pinned payment wallet's account,
  *   for no more than the cap, and nothing else names that account;
  * - the action is one `TransferChecked` of a token the app lists, out of the
- *   portfolio's own account, or Jupiter Lend's deposit or withdraw for this
+ *   portfolio's own account, or Jupiter Lend's deposit, withdraw or redeem for this
  *   portfolio in the one layout its API builds;
  * - an account is opened only for the action beside it (see `opensFor`), so
  *   the relayer cannot be made to open accounts for strangers or for tokens

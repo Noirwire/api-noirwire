@@ -27,3 +27,6 @@ npm-debug.log*
 .idea/
 .vscode/
 .DS_Store
+
+# The local stack started by `npm run dev:stack`
+.dev-stack/

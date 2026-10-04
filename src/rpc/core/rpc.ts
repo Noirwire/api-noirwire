@@ -22,6 +22,7 @@ export const ALLOWED_METHODS: ReadonlySet<string> = new Set([
   "getMinimumBalanceForRentExemption",
   "getMultipleAccounts",
   "getSignatureStatuses",
+  "getSignaturesForAddress",
   "getTokenAccountsByOwner",
   "getTransaction",
   "isBlockhashValid",
@@ -32,10 +33,11 @@ export const ALLOWED_METHODS: ReadonlySet<string> = new Set([
 /**
  * The calls that cost the provider real work or reach the chain. They get a
  * budget and a provider allowance of their own, well under the ones for
- * plain reads. The costliest reads of all (`getProgramAccounts`,
- * `getSignaturesForAddress`) are not on the list above and never pass.
+ * plain reads. `getProgramAccounts` is not on the list above and never
+ * passes.
  */
 export const HEAVY_METHODS: ReadonlySet<string> = new Set([
+  "getSignaturesForAddress",
   "getTokenAccountsByOwner",
   "getTransaction",
   "sendTransaction",
@@ -71,6 +73,27 @@ export function rpcHeavyLimits(providerRps: number): RouteLimits {
   return { perSession: Math.ceil(total / 4), perIp: total, total };
 }
 
+/**
+ * The most signatures one `getSignaturesForAddress` call may ask for. The
+ * wallet asks for a signer's recent transactions to find one that landed
+ * without its id having been recorded, before it tells anyone a payment did
+ * not go through. It needs the last few dozen, never a history: the limit
+ * must be stated, and small.
+ */
+export const SIGNATURES_MAX_LIMIT = 50;
+
+/** One address, and options that state the limit. */
+const signaturesParams = z.tuple([
+  z.string().regex(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/),
+  z.strictObject({
+    limit: z.number().int().min(1).max(SIGNATURES_MAX_LIMIT),
+    commitment: z.enum(["confirmed", "finalized"]).optional(),
+    before: z.string().max(90).optional(),
+    until: z.string().max(90).optional(),
+    minContextSlot: z.number().int().nonnegative().optional(),
+  }),
+]);
+
 const call = z.strictObject({
   jsonrpc: z.literal("2.0"),
   id: z.union([z.string().max(64), z.number()]),
@@ -94,6 +117,13 @@ export function readRpcCall(body: string): RpcReading {
   if (typeof method !== "string" || !ALLOWED_METHODS.has(method)) {
     return { refused: refusal("method_not_allowed") };
   }
-  if (!call.safeParse(json).success) return invalid;
+  const parsed = call.safeParse(json);
+  if (!parsed.success) return invalid;
+  if (
+    method === "getSignaturesForAddress" &&
+    !signaturesParams.safeParse(parsed.data.params).success
+  ) {
+    return invalid;
+  }
   return { method, heavy: HEAVY_METHODS.has(method) };
 }

@@ -397,6 +397,20 @@ describe("the relayer route", () => {
     expect((await ask(Number(MAX_RELAYER_FEE_RAW) + 1)).status).toBe(422);
   });
 
+  it("prices and signs a redemption of a whole Earn position like a withdrawal", async () => {
+    const plain = await call("estimateTransactionFee", estimateParams(genuine.redeem()));
+    expect(plain.json.result.fee_in_token).toBe(Number(PLAIN_FEE));
+    const opening = await call(
+      "estimateTransactionFee",
+      estimateParams(genuine.redeemToNoAccount()),
+    );
+    expect(opening.json.result.fee_in_token).toBe(Number(OPENING_FEE));
+    const signed = await call("signTransaction", signParams(signedByPortfolio(genuine.redeem())));
+    expect(signed.status).toBe(200);
+    // Not signed by the portfolio, it is refused like any other.
+    expect((await call("signTransaction", signParams(genuine.redeem()))).status).toBe(422);
+  });
+
   it("returns only the fields the wallet reads, whatever else the relayer answered with", async () => {
     koraAnswer = () => json({ result: { ...koraEstimate(11_000), internal: "detail" }, extra: 1 });
     const priced = await call("estimateTransactionFee", estimateParams(genuine.sendUsdc()));

@@ -218,6 +218,18 @@ describe("POST /v1/relayer", () => {
     expect(api.providers.sentTo("kora-2")).toHaveLength(0);
   });
 
+  it("prices and signs a redemption of a whole Earn position", async () => {
+    const priced = await relayer("estimateTransactionFee", estimateParams(genuine.redeem()));
+    expect(priced.status).toBe(200);
+    expect(priced.json.result.fee_in_token).toBe(Number(PLAIN_FEE));
+    const signed = await relayer(
+      "signTransaction",
+      signParams(signedByPortfolio(genuine.redeem())),
+    );
+    expect(signed.status).toBe(200);
+    expect(Object.keys(signed.json).sort()).toEqual(["signature", "transaction"]);
+  });
+
   it("refuses a method outside the three, a batch, and a body over the cap", async () => {
     for (const method of ["signAndSendTransaction", "transferTransaction", "getConfig"]) {
       const response = await relayer(method, signParams(signedByPortfolio(genuine.sendUsdc())));

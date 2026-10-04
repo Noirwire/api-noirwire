@@ -17,7 +17,9 @@ const refusal = (body: unknown, raw?: string) => {
 
 describe("reading a JSON-RPC call", () => {
   it("passes every method the wallet calls", () => {
-    for (const method of ALLOWED_METHODS) {
+    for (const method of [...ALLOWED_METHODS].filter(
+      (name) => name !== "getSignaturesForAddress",
+    )) {
       expect(read(call(method, [ADDRESS]))).toEqual({ method, heavy: HEAVY_METHODS.has(method) });
     }
   });
@@ -34,11 +36,47 @@ describe("reading a JSON-RPC call", () => {
 
   it("marks the calls that cost the provider real work", () => {
     expect([...HEAVY_METHODS].sort()).toEqual([
+      "getSignaturesForAddress",
       "getTokenAccountsByOwner",
       "getTransaction",
       "sendTransaction",
       "simulateTransaction",
     ]);
+  });
+
+  it("lets the wallet look for a landed transaction: one address, a stated and small limit", () => {
+    const search = (params: unknown) =>
+      read({ jsonrpc: "2.0", id: 1, method: "getSignaturesForAddress", params });
+    expect(search([ADDRESS, { limit: 50, commitment: "confirmed" }])).toEqual({
+      method: "getSignaturesForAddress",
+      heavy: true,
+    });
+    expect(search([ADDRESS, { limit: 1 }])).toMatchObject({ heavy: true });
+    expect(
+      search([ADDRESS, { limit: 10, before: "5".repeat(88), until: "5".repeat(88) }]),
+    ).toMatchObject({
+      heavy: true,
+    });
+    for (const params of [
+      undefined,
+      [],
+      [ADDRESS],
+      [ADDRESS, {}],
+      [ADDRESS, { limit: 51 }],
+      [ADDRESS, { limit: 1000 }],
+      [ADDRESS, { limit: 0 }],
+      [ADDRESS, { limit: 2.5 }],
+      [ADDRESS, { limit: "50" }],
+      [ADDRESS, { limit: 10, commitment: "processed" }],
+      [ADDRESS, { limit: 10, extra: true }],
+      [ADDRESS, { limit: 10 }, "confirmed"],
+      [[ADDRESS, ADDRESS], { limit: 10 }],
+      ["not an address", { limit: 10 }],
+      [`${ADDRESS},${ADDRESS}`, { limit: 10 }],
+    ]) {
+      const reading = search(params);
+      expect("refused" in reading && reading.refused.status, JSON.stringify(params)).toBe(400);
+    }
   });
 
   it("refuses a method the wallet does not use", () => {

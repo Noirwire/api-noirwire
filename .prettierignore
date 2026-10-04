@@ -6,3 +6,4 @@ supabase/.temp
 supabase/.branches
 .railway/node_modules
 .railway/package-lock.json
+.dev-stack

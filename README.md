@@ -83,6 +83,8 @@ npm run supabase:start      # Supabase Auth on port 54421
 npm run dev                 # the API on http://localhost:4000, docs at /docs
 ```
 
+Or both at once, in the background, for an app or a client library to develop against: `npm run dev:stack` starts the local Supabase and the API on port 4000 (devnet, the `.env.example` defaults) and prints the URLs; `npm run dev:stack:stop` stops what it started.
+
 In another terminal, prove the chain end to end: a session is started through the API, used on real routes, renewed, and a request without one is refused.
 
 ```sh

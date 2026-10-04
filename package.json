@@ -10,6 +10,8 @@
   },
   "scripts": {
     "dev": "nest start --watch --env-file .env",
+    "dev:stack": "node scripts/dev-stack.mjs",
+    "dev:stack:stop": "node scripts/dev-stack.mjs stop",
     "build": "nest build",
     "start": "node dist/main.js",
     "start:local": "node --env-file=.env dist/main.js",
@@ -23,7 +25,7 @@
     "openapi": "nest build && node scripts/export-openapi.mjs",
     "supabase:start": "supabase start",
     "supabase:stop": "supabase stop",
-    "e2e:local": "node --env-file=.env scripts/e2e-local.mjs"
+    "e2e:local": "node scripts/e2e-local.mjs"
   },
   "dependencies": {
     "@nestjs/common": "12.1.2",

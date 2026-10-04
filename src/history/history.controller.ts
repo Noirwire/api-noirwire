@@ -1,11 +1,12 @@
 import { Controller, Get, Inject, Param, Req, Res } from "@nestjs/common";
 import { ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
+import { ALL_STOCKS } from "../chain/core/tokenRegistry.js";
 import { answer, refusal } from "../common/core/answer.js";
 import { createCache, type Cached } from "../common/core/cached.js";
 import type { RouteLimits } from "../common/core/quota.js";
 import { Admission } from "../common/http/admission.js";
-import { errorResponse, jsonResponse, SessionRequired } from "../common/http/api-docs.js";
+import { ApiErrors, ok } from "../common/http/api-docs.js";
 import type { SessionRequest } from "../common/http/caller.js";
 import { send } from "../common/http/send.js";
 import type { Config } from "../config/core/config.js";
@@ -35,7 +36,11 @@ export class HistoryController {
   ) {}
 
   @Get(":symbol/:range")
-  @ApiParam({ name: "symbol", description: "A listed tracker's symbol.", example: "NVDAx" })
+  @ApiParam({
+    name: "symbol",
+    description: "A listed tracker's symbol, in any letter case.",
+    enum: ALL_STOCKS.map((stock) => stock.symbol),
+  })
   @ApiParam({ name: "range", enum: PRICE_RANGES, description: "One day, one week or one month." })
   @ApiOperation({
     summary: "One tracker's price history over one range",
@@ -48,23 +53,42 @@ export class HistoryController {
       "",
       "**Contains wallet addresses: no.** The path names a public symbol, not an account. **Received by:** Jupiter, which is asked for a listed mint's candles by this server, not per caller. Which tracker a caller looked at is never logged: the log records the route's pattern, not the symbol.",
       "",
-      "**Refused:** a symbol that is not a listed tracker, a range other than the three, or any query string (all 404).",
+      "**Refused:** a symbol that is not a listed tracker or a range other than the three (404). As on every route, a query string is refused (400).",
       "",
       "**Quotas (per minute):** 600 per session, 6,000 per address, 30,000 in total.",
     ].join("\n"),
   })
-  @jsonResponse(200, "The closes, oldest first. At least two.", {
-    series: { summary: "A series", value: { points: [761.2, 762.9, 764.15] } },
-  })
-  @errorResponse(
-    404,
-    "Not a listed tracker or range, a query string is present, or the source has no usable history for it.",
-    { not_found: "Nothing to draw" },
+  @ok(
+    "The closes, oldest first. At least two.",
+    {
+      type: "object",
+      required: ["points"],
+      properties: {
+        points: {
+          type: "array",
+          minItems: 2,
+          items: { type: "number" },
+          description:
+            "Candle closing prices in US dollars for one displayed token, oldest first: hourly for `1D`, four-hourly for `1W`, daily for `1M`.",
+        },
+      },
+    },
+    { series: { summary: "A series", value: { points: [761.2, 762.9, 764.15] } } },
+    { age: true },
   )
-  @errorResponse(502, "The chart source could not be read.", {
-    upstream_failed: "Source unavailable",
+  @ApiErrors({
+    session: true,
+    own: {
+      404: {
+        why: "Not a listed tracker or range, or the source has no usable history for it.",
+        codes: { not_found: "Nothing to draw" },
+      },
+      502: {
+        why: "The chart source could not be read.",
+        codes: { upstream_failed: "Source unavailable" },
+      },
+    },
   })
-  @SessionRequired()
   async get(
     @Param("symbol") symbol: string,
     @Param("range") range: string,
@@ -72,7 +96,7 @@ export class HistoryController {
     @Res() res: Response,
   ): Promise<void> {
     const none = () => send(res, refusal("not_found"));
-    const named = req.originalUrl.includes("?") ? null : seriesOf(symbol, range);
+    const named = seriesOf(symbol, range);
     if (!named) return none();
     const admitted = await this.admission.forSession(req, {
       route: "history",

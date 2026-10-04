@@ -2,7 +2,7 @@ import { Controller, HttpCode, Inject, Post, Req, Res } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { Admission } from "../common/http/admission.js";
-import { SessionRequired } from "../common/http/api-docs.js";
+import { ApiErrors } from "../common/http/api-docs.js";
 import type { SessionRequest } from "../common/http/caller.js";
 import { send } from "../common/http/send.js";
 import type { Config } from "../config/core/config.js";
@@ -77,7 +77,7 @@ export class EventsController {
     status: 204,
     description: "Always, once the session is verified. No body. Says nothing about what was done.",
   })
-  @SessionRequired()
+  @ApiErrors({ session: true })
   async report(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
     const done = () => send(res, { status: 204, body: null });
     const { analytics } = this.config;

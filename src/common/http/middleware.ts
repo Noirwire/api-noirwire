@@ -70,6 +70,22 @@ export function responseDeadline(ms = RESPONSE_DEADLINE_MS): Middleware {
   };
 }
 
+/**
+ * No route takes a query string. The wallets send none: an address in a
+ * URL would sit in every access log on the way, and a query is a way to ask
+ * for the same thing under another name. So one is refused everywhere, the
+ * same way, before anything else is looked at. The documentation pages are
+ * the one exception: they are pages.
+ */
+export function noQueryString(): Middleware {
+  return (req, res, next) => {
+    if (!req.originalUrl.includes("?") || isDocsPage(req.path) || req.path === "/docs-json") {
+      return next();
+    }
+    send(res, refusal("invalid_request"));
+  };
+}
+
 const ALLOWED_METHODS = "GET, POST";
 const ALLOWED_HEADERS = "Authorization, Content-Type";
 /** How old a cached price is, and when to try again: a browser may not read either unless it is named here. */

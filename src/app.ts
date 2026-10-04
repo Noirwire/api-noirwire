@@ -5,7 +5,13 @@ import type { NestExpressApplication } from "@nestjs/platform-express";
 import { SwaggerModule } from "@nestjs/swagger";
 import { AppModule } from "./app.module.js";
 import type { Log } from "./common/core/log.js";
-import { cors, requestLog, responseDeadline, securityHeaders } from "./common/http/middleware.js";
+import {
+  cors,
+  noQueryString,
+  requestLog,
+  responseDeadline,
+  securityHeaders,
+} from "./common/http/middleware.js";
 import type { Config } from "./config/core/config.js";
 import { openApiDocument } from "./openapi.js";
 
@@ -26,7 +32,7 @@ export async function createApp(config: Config, log: Log): Promise<NestExpressAp
   });
   app.disable("x-powered-by");
   app.disable("etag");
-  app.use(securityHeaders(), requestLog(log), responseDeadline(), cors(config));
+  app.use(securityHeaders(), requestLog(log), responseDeadline(), cors(config), noQueryString());
   SwaggerModule.setup("docs", app, openApiDocument(app), {
     jsonDocumentUrl: "docs-json",
     raw: ["json"],

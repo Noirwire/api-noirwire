@@ -2,13 +2,7 @@ import { Controller, Get, Inject, Post, Req, Res } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
 import { Admission } from "../common/http/admission.js";
-import {
-  BodyLimits,
-  errorResponse,
-  EXAMPLE,
-  jsonResponse,
-  SessionRequired,
-} from "../common/http/api-docs.js";
+import { address, ApiErrors, EXAMPLE, ok, transaction } from "../common/http/api-docs.js";
 import { callerOf, type SessionRequest } from "../common/http/caller.js";
 import { send } from "../common/http/send.js";
 import type { Config } from "../config/core/config.js";
@@ -39,19 +33,44 @@ export class RelayerController {
       "**Quotas (per minute):** 60 per session, 600 per address, 3,000 in total, shared with `POST /v1/relayer`.",
     ].join("\n"),
   })
-  @jsonResponse(200, "The relayer's pinned keys, or that there is none.", {
-    available: {
-      summary: "A relayer is configured",
-      value: {
-        available: true,
-        feePayers: [EXAMPLE.address],
-        paymentWallet: EXAMPLE.otherAddress,
-        accountCreation: true,
+  @ok(
+    "The relayer's pinned keys, or that there is none.",
+    {
+      type: "object",
+      required: ["available"],
+      properties: {
+        available: {
+          type: "boolean",
+          description:
+            "Whether this deployment has a fee relayer. When false, no other field is sent.",
+        },
+        feePayers: {
+          type: "array",
+          items: address("A relayer replica's fee payer."),
+          description:
+            "The only keys a relayer-paid transaction may name as fee payer: one per replica.",
+        },
+        paymentWallet: address("The wallet whose USDC account the network cost is paid into."),
+        accountCreation: {
+          type: "boolean",
+          description: "Whether the relayer will open a token account as part of an action.",
+        },
       },
     },
-    none: { summary: "No relayer", value: { available: false } },
-  })
-  @SessionRequired()
+    {
+      available: {
+        summary: "A relayer is configured",
+        value: {
+          available: true,
+          feePayers: [EXAMPLE.address],
+          paymentWallet: EXAMPLE.otherAddress,
+          accountCreation: true,
+        },
+      },
+      none: { summary: "No relayer", value: { available: false } },
+    },
+  )
+  @ApiErrors({ session: true })
   async pins(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
     const admitted = await this.admission.forSession(req, { ...RULE, maxBodyBytes: 0 });
     if ("refused" in admitted) return send(res, admitted.refused);
@@ -80,8 +99,8 @@ export class RelayerController {
       "- Its fee payer is one of the pinned keys and equals `signer_key`; the only other signer is one portfolio.",
       "- It carries no priority fee and no System instruction (which also rules out a durable nonce).",
       "- Its instructions are, in order and with nothing else: at most one idempotent creation of a token account funded by the fee payer; at most one action; and the payment.",
-      "- The action is a transfer of USDC or a listed tracker out of the portfolio's own account, or Jupiter Lend's deposit or withdrawal for this portfolio in the one layout its API builds.",
-      "- An account is opened only for the action beside it: the recipient's account for the token sent, or the portfolio's own account for what it is paid in.",
+      "- The action is a transfer of USDC or a listed tracker out of the portfolio's own account, or Jupiter Lend's deposit, withdrawal (an amount of USDC) or redemption (a number of receipt shares, which is how a whole position is taken back) for this portfolio, each in the one layout the program takes: the same accounts, in the same order, and nothing more.",
+      "- An account is opened only for the action beside it: the recipient's account for the token sent, or the portfolio's own account for what it is paid in (the receipt token for a deposit, USDC for a withdrawal or a redemption).",
       "- The payment is one USDC transfer from the portfolio's own account into the pinned payment wallet's account, no larger than a fixed cap (0.05 USDC, or 2.5 USDC when an account is opened).",
       "- The fee payer appears nowhere except as the funder of that one account.",
       "",
@@ -154,62 +173,119 @@ export class RelayerController {
       },
     },
   })
-  @jsonResponse(200, "The answer to the method called.", {
-    payer: {
-      summary: "getPayerSigner",
-      value: {
-        result: { signer_address: EXAMPLE.address, payment_address: EXAMPLE.otherAddress },
+  @ok(
+    "The answer to the method called: one of three shapes.",
+    {
+      oneOf: [
+        {
+          title: "getPayerSigner",
+          type: "object",
+          required: ["result"],
+          properties: {
+            result: {
+              type: "object",
+              required: ["signer_address", "payment_address"],
+              properties: {
+                signer_address: address("The fee payer to build the transaction against."),
+                payment_address: address("The wallet whose USDC account the payment goes to."),
+              },
+            },
+          },
+        },
+        {
+          title: "estimateTransactionFee",
+          type: "object",
+          required: ["result"],
+          properties: {
+            result: {
+              type: "object",
+              required: ["fee_in_token", "signer_pubkey", "payment_address"],
+              properties: {
+                fee_in_token: {
+                  type: "integer",
+                  description:
+                    "What the transaction must pay, in raw USDC units: millionths of a USDC (20000 is 0.02 USDC).",
+                },
+                signer_pubkey: address("The fee payer the price is for."),
+                payment_address: address("The wallet whose USDC account the payment goes to."),
+              },
+            },
+          },
+        },
+        {
+          title: "signTransaction",
+          type: "object",
+          required: ["transaction", "signature"],
+          properties: {
+            transaction: transaction(
+              "The transaction that was sent in, now also signed by the fee payer. Not broadcast: send it with `POST /v1/rpc` `sendTransaction`.",
+            ),
+            signature: {
+              type: "string",
+              description:
+                "The transaction's id: the fee payer's signature, base58 (86 to 88 characters). Record it before sending.",
+            },
+          },
+        },
+      ],
+    },
+    {
+      payer: {
+        summary: "getPayerSigner",
+        value: {
+          result: { signer_address: EXAMPLE.address, payment_address: EXAMPLE.otherAddress },
+        },
+      },
+      estimate: {
+        summary: "estimateTransactionFee: 0.02 USDC",
+        value: {
+          result: {
+            fee_in_token: 20000,
+            signer_pubkey: EXAMPLE.address,
+            payment_address: EXAMPLE.otherAddress,
+          },
+        },
+      },
+      sign: {
+        summary:
+          "signTransaction: signed, not broadcast. Record `signature`, then send it yourself",
+        value: { transaction: EXAMPLE.transaction, signature: EXAMPLE.signature },
       },
     },
-    estimate: {
-      summary: "estimateTransactionFee",
-      value: {
-        result: {
-          fee_in_token: 20000,
-          signer_pubkey: EXAMPLE.address,
-          payment_address: EXAMPLE.otherAddress,
+  )
+  @ApiErrors({
+    session: true,
+    body: RELAYER_MAX_BODY_BYTES,
+    own: {
+      400: {
+        why: "The body is not JSON, is a batch, or `params` is not an object.",
+        codes: { invalid_request: "Malformed request, or a query string" },
+      },
+      403: {
+        why: "The method is not one of the three. Everything else the relayer can do, sending a transaction above all, is unreachable through this API.",
+        codes: { method_not_allowed: "Not one of the three methods" },
+      },
+      422: {
+        why: "The transaction failed a check, here or on the relayer. Nothing was signed. The wallet is told whether the payment was too small, the one refusal it can act on by asking for a new price; every other reason is the single code `refused`.",
+        codes: {
+          insufficient_payment: "The payment is below this server's price",
+          refused:
+            "Any other failed check: not the template, a missing or invalid portfolio signature, a fee payer that is not pinned, a price disagreement, a price above the cap",
+        },
+      },
+      502: {
+        why: "The relayer answered the call and this server cannot use the answer: an error status, something unreadable, keys this server does not pin, or a signed transaction that is not the one sent in with a valid fee payer signature. What it did with the request is not known. For a signature, treat the transaction as possibly signed, and do not build it again until the chain has settled it.",
+        codes: { no_answer: "No usable answer: what the relayer did is not known" },
+      },
+      503: {
+        why: "`relayer_unavailable`: nothing was signed, so the action may be built again, for another replica if there is one. A replica that refuses this server's own credentials lands here too (and is logged as an operator error): never as a `401`.",
+        codes: {
+          relayer_unavailable:
+            "No relayer, every replica failed, no price to charge by, or this transaction's replica is unreachable or turned the request away before signing",
         },
       },
     },
-    sign: {
-      summary: "signTransaction: signed, not broadcast. Record `signature`, then send it yourself",
-      value: {
-        transaction: EXAMPLE.transaction,
-        signature:
-          "ExampLeSignature1111111111111111111111111111111111111111111111111111111111111111111111",
-      },
-    },
   })
-  @errorResponse(400, "The body is not JSON, is a batch, or `params` is not an object.", {
-    invalid_request: "Malformed request",
-  })
-  @errorResponse(
-    422,
-    "The transaction failed a check, here or on the relayer. Nothing was signed. The wallet is told whether the payment was too small, the one refusal it can act on by asking for a new price; every other reason is the single code `refused`.",
-    {
-      insufficient_payment: "The payment is below this server's price",
-      refused:
-        "Any other failed check: not the template, a missing or invalid portfolio signature, a fee payer that is not pinned, a price disagreement, a price above the cap",
-    },
-  )
-  @errorResponse(
-    502,
-    "The relayer answered the call and this server cannot use the answer: an error status, something unreadable, keys this server does not pin, or a signed transaction that is not the one sent in with a valid fee payer signature. What it did with the request is not known. For a signature, treat the transaction as possibly signed, and do not build it again until the chain has settled it.",
-    { no_answer: "No usable answer: what the relayer did is not known" },
-  )
-  @SessionRequired({
-    403: {
-      method_not_allowed:
-        "Not one of the three methods. Everything else the relayer can do, sending a transaction above all, is unreachable through this API",
-    },
-    503: {
-      relayer_unavailable:
-        "No relayer, every replica failed, no price to charge by, or this transaction's replica is unreachable or turned the request away before signing",
-    },
-    describe503:
-      "`relayer_unavailable`: nothing was signed, so the action may be built again, for another replica if there is one. A replica that refuses this server's own credentials lands here too (and is logged as an operator error): never as a `401`. `unavailable`: the token keys could not be read.",
-  })
-  @BodyLimits(RELAYER_MAX_BODY_BYTES)
   async call(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
     const admitted = await this.admission.forSession(req, {
       ...RULE,

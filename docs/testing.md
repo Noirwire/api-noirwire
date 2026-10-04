@@ -40,6 +40,10 @@ npm run dev                                   # in another terminal
 API_LIVE_URL=http://localhost:4000 npm run test:live
 ```
 
+## A local stack for the apps: `npm run dev:stack`
+
+`scripts/dev-stack.mjs` starts the local Supabase stack and the API on port 4000 (devnet, the `.env.example` defaults) in the background and prints the URLs. `npm run dev:stack:stop` stops what it started. The apps and the client library's live tests run against it.
+
 ## End to end, locally: `npm run e2e:local`
 
 `scripts/e2e-local.mjs`. Against a running copy and the local Supabase stack: starts a session through the API, calls real routes with it, renews it, and checks that a request without one is refused.

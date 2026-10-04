@@ -56,9 +56,10 @@ export default defineConfig([
         fetch: "readonly",
         URL: "readonly",
         AbortSignal: "readonly",
+        setTimeout: "readonly",
       },
     },
     rules: { "no-console": "off" },
   },
-  globalIgnores(["dist/**", "coverage/**", ".railway/**", "supabase/**"]),
+  globalIgnores(["dist/**", "coverage/**", ".railway/**", "supabase/**", ".dev-stack/**"]),
 ]);

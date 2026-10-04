@@ -1,10 +1,10 @@
 import { Controller, Inject, Post, Req, Res } from "@nestjs/common";
-import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
 import { Public } from "../auth/public.decorator.js";
 import { HOUR_MS, MINUTE_MS, type Budget } from "../common/core/quota.js";
 import { Admission } from "../common/http/admission.js";
-import { BodyLimits, errorResponse, EXAMPLE } from "../common/http/api-docs.js";
+import { ApiErrors, EXAMPLE, ok } from "../common/http/api-docs.js";
 import { ipOf } from "../common/http/caller.js";
 import { send } from "../common/http/send.js";
 import type { Config } from "../config/core/config.js";
@@ -54,29 +54,20 @@ const WHAT_A_SESSION_IS = [
   "**The wallet never talks to the identity provider.** This server asks Supabase Auth for the anonymous session, so Supabase sees this server's address and never the caller's, and nothing of the caller's request is passed on to it.",
 ].join("\n");
 
-const UNAVAILABLE = errorResponse(
-  503,
-  "The identity provider could not be reached, failed, or issued something this API would not accept. No session was handed out.",
-  { unavailable: "Session service unavailable" },
-);
+const RATIONED = {
+  why: "This address's quota, or the total, is spent, or the identity provider itself is rate limiting. Wait and retry with backoff.",
+  codes: { rate_limited: "Quota spent" },
+} as const;
 
-const KEY_REFUSED = errorResponse(
-  502,
-  "The identity provider refused this server's own key (it answered 401 or 403). That is an operator's to fix and is logged as such. It is never passed on as a 401, which here always means the caller's own session.",
-  { upstream_refused: "The identity provider refused this server's key" },
-);
+const KEY_REFUSED = {
+  why: "The identity provider refused this server's own key (it answered 401 or 403). That is an operator's to fix and is logged as such. It is never passed on as a 401, which here always means the caller's own session.",
+  codes: { upstream_refused: "The identity provider refused this server's key" },
+} as const;
 
-const RATE_LIMITED = errorResponse(
-  429,
-  "This address's quota, or the total, is spent, or the identity provider itself is rate limiting. Wait and retry with backoff.",
-  { rate_limited: "Quota spent" },
-);
-
-const FOREIGN_ORIGIN = errorResponse(
-  403,
-  "The request names an `Origin` that is not on this API's list.",
-  { origin_not_allowed: "Foreign origin" },
-);
+const NO_PROVIDER = {
+  why: "The identity provider could not be reached, failed, or issued something this API would not accept. No session was handed out.",
+  codes: { unavailable: "Session service unavailable" },
+} as const;
 
 const SESSION_SHAPE = {
   type: "object" as const,
@@ -99,15 +90,8 @@ const SESSION_SHAPE = {
 };
 
 const session = (description: string) =>
-  ApiResponse({
-    status: 200,
-    description,
-    content: {
-      "application/json": {
-        schema: SESSION_SHAPE,
-        examples: { session: { summary: "A session (dummy values)", value: SESSION_EXAMPLE } },
-      },
-    },
+  ok(description, SESSION_SHAPE, {
+    session: { summary: "A session (dummy values)", value: SESSION_EXAMPLE },
   });
 
 @ApiTags("Session")
@@ -142,11 +126,10 @@ export class SessionController {
     ].join("\n"),
   })
   @session("A new session. `expiresAt` is Unix time in seconds.")
-  @FOREIGN_ORIGIN
-  @RATE_LIMITED
-  @KEY_REFUSED
-  @UNAVAILABLE
-  @BodyLimits(START_MAX_BODY_BYTES)
+  @ApiErrors({
+    body: START_MAX_BODY_BYTES,
+    own: { 429: RATIONED, 502: KEY_REFUSED, 503: NO_PROVIDER },
+  })
   async start(@Req() req: Request, @Res() res: Response): Promise<void> {
     const budgets = startBudgets(ipOf(req, this.config), this.config.sessionStarts);
     const admitted = await this.admission.with(req, budgets, START_MAX_BODY_BYTES);
@@ -186,22 +169,25 @@ export class SessionController {
     },
   })
   @session("The renewed session. Replace both tokens. `expiresAt` is Unix time in seconds.")
-  @errorResponse(400, "The body is not JSON, or is not exactly `{ refreshToken }`.", {
-    invalid_request: "Malformed request",
-  })
-  @errorResponse(
-    401,
-    "The session is not accepted and cannot be renewed. Either way the wallet starts a new one with `POST /v1/session`.",
-    {
-      session_expired: "The session is past its maximum age",
-      session_invalid: "The refresh token is unknown, already used or revoked",
+  @ApiErrors({
+    body: REFRESH_MAX_BODY_BYTES,
+    own: {
+      400: {
+        why: "The body is not JSON, or is not exactly `{ refreshToken }`.",
+        codes: { invalid_request: "Malformed request, or a query string" },
+      },
+      401: {
+        why: "The session is not accepted and cannot be renewed. Either way the wallet starts a new one with `POST /v1/session`.",
+        codes: {
+          session_expired: "The session is past its maximum age",
+          session_invalid: "The refresh token is unknown, already used or revoked",
+        },
+      },
+      429: RATIONED,
+      502: KEY_REFUSED,
+      503: NO_PROVIDER,
     },
-  )
-  @FOREIGN_ORIGIN
-  @RATE_LIMITED
-  @KEY_REFUSED
-  @UNAVAILABLE
-  @BodyLimits(REFRESH_MAX_BODY_BYTES)
+  })
   async refresh(@Req() req: Request, @Res() res: Response): Promise<void> {
     const budgets = refreshBudgets(ipOf(req, this.config));
     const admitted = await this.admission.with(req, budgets, REFRESH_MAX_BODY_BYTES);

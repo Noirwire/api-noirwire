@@ -16,10 +16,10 @@ const order = {
   slippageBps: "50",
 };
 
-function plan(method: "GET" | "POST", path: string, body: unknown, hasQuery = false) {
+function plan(method: "GET" | "POST", path: string, body: unknown) {
   const route = jupiterRoute(method, path);
   if (!route) return "not found";
-  const planned = planJupiter(route, method, path, JSON.stringify(body), hasQuery);
+  const planned = planJupiter(route, method, path, JSON.stringify(body));
   return "refused" in planned ? planned.refused.status : planned.upstream;
 }
 
@@ -108,12 +108,6 @@ describe("the Jupiter allow-list", () => {
       method: "GET",
       pathAndQuery: "lend/v1/earn/tokens",
     });
-  });
-
-  it("never passes a caller's query string on", () => {
-    expect(plan("GET", "lend/v1/earn/tokens", undefined, true)).toBe(400);
-    expect(plan("POST", "swap/v2/execute", {}, true)).toBe(400);
-    expect(plan("POST", "swap/v2/order", order, true)).toBe(400);
   });
 });
 

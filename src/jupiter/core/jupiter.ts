@@ -87,16 +87,8 @@ export type JupiterPlan =
   | { refused: Answer };
 
 /** What is sent to Jupiter for an admitted request on a listed route. */
-export function planJupiter(
-  route: Route,
-  method: string,
-  path: string,
-  body: string,
-  hasQuery: boolean,
-): JupiterPlan {
+export function planJupiter(route: Route, method: string, path: string, body: string): JupiterPlan {
   const invalid = { refused: refusal("invalid_request") };
-  // The wallet sends no query string on any of these, so one is never passed on.
-  if (hasQuery) return invalid;
   if (route.asQuery) {
     const query = queryFrom(body, route.asQuery);
     if (query === null) return invalid;

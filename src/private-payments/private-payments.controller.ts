@@ -4,14 +4,7 @@ import type { Response } from "express";
 import { refusal } from "../common/core/answer.js";
 import type { Relay } from "../common/core/relay.js";
 import { Admission } from "../common/http/admission.js";
-import {
-  BodyLimits,
-  errorResponse,
-  EXAMPLE,
-  jsonResponse,
-  SessionRequired,
-  UpstreamFailures,
-} from "../common/http/api-docs.js";
+import { ApiErrors, EXAMPLE, ok, passedThrough } from "../common/http/api-docs.js";
 import type { SessionRequest } from "../common/http/caller.js";
 import { send } from "../common/http/send.js";
 import type { Config } from "../config/core/config.js";
@@ -35,8 +28,9 @@ export class PrivatePaymentsController {
   @Post("*path")
   @ApiParam({
     name: "path",
-    description: "One of the listed MagicBlock paths, exactly as written.",
-    example: "v1/spl/transfer",
+    description:
+      "The MagicBlock path, exactly as written. These are the only ones there are; the slashes are part of the path and are not escaped.",
+    enum: [...PRIVATE_PAYMENT_PATHS],
   })
   @ApiOperation({
     summary: "MagicBlock private payments",
@@ -72,24 +66,40 @@ export class PrivatePaymentsController {
       },
     },
   })
-  @jsonResponse(
-    200,
+  @ok(
     "MagicBlock's answer, passed back as it came. Its own errors also arrive as it wrote them, with whatever status it used, except 401, 403 and 429 (see 502 and 429).",
+    passedThrough(
+      "MagicBlock's own response for the path asked, unchanged. The fields the wallets read are named here; it may send others.",
+      {
+        transaction: {
+          type: "string",
+          description: "Building a transfer: the transaction to review and sign, base64.",
+        },
+        signature: {
+          type: "string",
+          description: "Landing a transfer: the transaction's id, base58.",
+        },
+      },
+    ),
     {
       transfer: {
         summary: "An unsigned transfer (shape is MagicBlock's)",
         value: { transaction: EXAMPLE.transaction },
       },
+      landed: {
+        summary: "A landed transfer (shape is MagicBlock's)",
+        value: { signature: EXAMPLE.signature },
+      },
     },
   )
-  @errorResponse(404, "The path is not one the wallets use.", { not_found: "Unlisted path" })
-  @SessionRequired({
-    503: { upstream_not_reached: "MagicBlock not reached: it never saw the request" },
-    describe503:
-      "MagicBlock could not be connected to at all, so it never saw the request; or the token keys could not be read.",
+  @ApiErrors({
+    session: true,
+    body: PRIVATE_PAYMENTS_MAX_BODY_BYTES,
+    upstream: "MagicBlock",
+    own: {
+      404: { why: "The path is not one the wallets use.", codes: { not_found: "Unlisted path" } },
+    },
   })
-  @BodyLimits(PRIVATE_PAYMENTS_MAX_BODY_BYTES)
-  @UpstreamFailures("MagicBlock")
   async post(
     @Param("path") segments: string | string[],
     @Req() req: SessionRequest,

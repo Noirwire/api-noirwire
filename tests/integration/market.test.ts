@@ -40,7 +40,7 @@ describe("GET /v1/prices", () => {
 
   it("takes no query string", async () => {
     const response = await api.call("/v1/prices?bust=1");
-    expect([response.status, response.json.code]).toEqual([404, "not_found"]);
+    expect([response.status, response.json.code]).toEqual([400, "invalid_request"]);
     expect(api.providers.sentTo("jupiter")).toHaveLength(0);
   });
 
@@ -67,13 +67,18 @@ describe("GET /v1/history/:symbol/:range", () => {
     );
   });
 
-  it("refuses a symbol that is not listed, a range that is not one, and any query", async () => {
+  it("refuses a query string like every route does", async () => {
+    const response = await api.call(`/v1/history/${STOCK.symbol}/1D?bust=1`);
+    expect([response.status, response.json.code]).toEqual([400, "invalid_request"]);
+    expect(api.providers.sentTo("datapi")).toHaveLength(0);
+  });
+
+  it("refuses a symbol that is not listed and a range that is not one", async () => {
     for (const path of [
       "/v1/history/NOPE/1D",
       `/v1/history/${STOCK.symbol}/1Y`,
       `/v1/history/${STOCK.symbol}/1d`,
       "/v1/history/SOL/1D",
-      `/v1/history/${STOCK.symbol}/1D?bust=1`,
       `/v1/history/${STOCK.mint.toBase58()}/1D`,
     ]) {
       const response = await api.call(path);

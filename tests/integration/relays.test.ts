@@ -104,6 +104,32 @@ describe("POST /v1/rpc", () => {
     expect(api.providers.sentTo("rpc")).toHaveLength(0);
   });
 
+  it("lets the wallet look for a signer's recent transactions: one address, a stated small limit", async () => {
+    const search = (params: unknown) =>
+      api.call("/v1/rpc", {
+        body: { jsonrpc: "2.0", id: 1, method: "getSignaturesForAddress", params },
+      });
+    api.providers.answer("rpc", () => ({ body: { jsonrpc: "2.0", id: 1, result: [] } }));
+    const found = await search([ADDRESS, { limit: 50, commitment: "confirmed" }]);
+    expect(found.status).toBe(200);
+    expect(found.json.result).toEqual([]);
+    expect(JSON.parse(api.providers.sentTo("rpc")[0].body).params).toEqual([
+      ADDRESS,
+      { limit: 50, commitment: "confirmed" },
+    ]);
+
+    for (const params of [
+      [ADDRESS],
+      [ADDRESS, {}],
+      [ADDRESS, { limit: 1000 }],
+      [ADDRESS, { limit: 0 }],
+    ]) {
+      const refused = await search(params);
+      expect([refused.status, refused.json.code]).toEqual([400, "invalid_request"]);
+    }
+    expect(api.providers.sentTo("rpc")).toHaveLength(1);
+  });
+
   it("refuses every batch", async () => {
     const batches = [
       [rpcCall("getBalance", [ADDRESS]), rpcCall("getLatestBlockhash")],
@@ -446,6 +472,7 @@ describe("the log", () => {
       ip: "203.0.113.77",
     });
     await api.call("/v1/jupiter/swap/v2/order", { body: order, token, ip: "203.0.113.77" });
+    await api.call("/v1/history/NVDAx/1Y", { token, ip: "203.0.113.77" });
     await api.call(`/v1/history/NVDAx/1D?probe=${ADDRESS}`, { token, ip: "203.0.113.77" });
     await api.call(`/nowhere/${ADDRESS}?q=${ADDRESS}`, { token, ip: "203.0.113.77" });
 
@@ -454,7 +481,8 @@ describe("the log", () => {
       ["POST /v1/rpc", 200],
       ["POST /v1/jupiter/*path", 200],
       ["GET /v1/history/:symbol/:range", 404],
-      ["unmatched", 404],
+      ["unmatched", 400],
+      ["unmatched", 400],
     ]);
     for (const line of requests) {
       expect(Object.keys(line).sort()).toEqual(["event", "ms", "route", "status"]);

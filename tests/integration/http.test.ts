@@ -91,7 +91,7 @@ describe("every response", () => {
       await api.call("/nowhere"),
     ];
     expect(errors.map((response) => response.status)).toEqual([
-      401, 400, 403, 429, 403, 404, 404, 503, 404,
+      401, 400, 403, 429, 403, 404, 400, 503, 404,
     ]);
     for (const response of errors) {
       expect(Object.keys(response.json).sort()).toEqual(["code", "error"]);
@@ -113,6 +113,28 @@ describe("every response", () => {
       .map(([code]) => code);
     // A 401 is only ever about the caller's own session.
     expect(unauthorized.sort()).toEqual(["session_expired", "session_invalid", "unauthorized"]);
+  });
+});
+
+describe("a query string", () => {
+  it("is refused the same way on every route: 400 invalid_request, before anything else", async () => {
+    const routes: [string, string, unknown?][] = [
+      ...SESSION_ROUTES,
+      ["GET", "/health"],
+      ["POST", "/v1/session"],
+      ["POST", "/v1/session/refresh", { refreshToken: "x" }],
+    ];
+    for (const [method, path, body] of routes) {
+      for (const query of ["?x=1", "?", "?address=GThUX1Atko4tqhN2NaiTazWSeFWMuiUvfFnyJyUghFMJ"]) {
+        const response = await api.call(`${path}${query}`, { method, body });
+        expect(response.status, `${method} ${path}${query}`).toBe(400);
+        expect(response.json).toEqual({
+          code: "invalid_request",
+          error: "The request is malformed.",
+        });
+      }
+    }
+    expect(api.providers.received).toHaveLength(0);
   });
 });
 
@@ -195,7 +217,7 @@ describe("the session every /v1 route requires", () => {
       expect(response.status).toBe(401);
     }
     const inQuery = await api.call(`/v1/prices?access_token=${token}`, { token: null });
-    expect(inQuery.status).toBe(401);
+    expect(inQuery.status).toBe(400);
   });
 });
 
