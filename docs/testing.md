@@ -21,6 +21,7 @@ Three suites, all Vitest.
 | `sessionGuard.test.ts` | The guard: missing token, refusals, public routes, failing closed                                                                                                                                               |
 | `sessions.test.ts`     | Starting and renewing a session with a stand-in identity provider                                                                                                                                               |
 | `events.test.ts`       | The closed event list and what is forwarded                                                                                                                                                                     |
+| `catalog.test.ts`      | The listed trackers are exactly the catalog the installed `@noirwire/shared` ships                                                                                                                              |
 | `marketData.test.ts`   | Prices, charts, and the read-once cache                                                                                                                                                                         |
 
 ## Integration: `npm run test:integration`

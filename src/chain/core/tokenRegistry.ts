@@ -7,7 +7,8 @@ import generatedStocks from "./stocks.generated.json" with { type: "json" };
  * the wallets ship (`stocks.generated.json` in @noirwire/shared), copied here
  * as committed data: nothing fetches it at runtime. It decides which tokens
  * the relayer pays to send, which prices are read and which charts exist, so
- * the two copies have to be kept the same.
+ * the two copies have to be kept the same: a test fails when this one
+ * differs from the installed package's.
  *
  * These are mainnet mints, all Token-2022, and have no devnet counterpart.
  */

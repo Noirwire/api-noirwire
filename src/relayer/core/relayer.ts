@@ -20,6 +20,7 @@ import {
   type RouteLimits,
 } from "../../common/core/quota.js";
 import type { Relay } from "../../common/core/relay.js";
+import { base58, bytesEqual } from "../../chain/core/bytes.js";
 import type { RelayerConfig } from "../../config/core/config.js";
 import type { AccountRent } from "./accountRent.js";
 import { lamportsInUsdc, readRelayed, relayedCostLamports, relayerFeeCap } from "./relayed.js";
@@ -57,6 +58,16 @@ import type { SolPrice } from "./solPrice.js";
  * An answer is returned only when every key in it is one this server pins,
  * so a misrouted or compromised relayer cannot hand the wallet a key of its
  * choosing.
+ *
+ * Nothing is ever broadcast from here. The relayer is asked to sign only,
+ * and the signed transaction goes back to the wallet with its id (the fee
+ * payer's signature, which exists only once the relayer has signed). The
+ * wallet records that id durably and then sends the transaction itself
+ * through /v1/rpc. Were it sent from here, a wallet that died right after
+ * would have no id to look for, could take the action for one that never
+ * went through, and the user would pay twice. A transaction that is signed
+ * and never sent costs the relayer nothing; it still counts against the
+ * signature budgets, which are taken at signing.
  *
  * A refusal is logged as a route name, a status and a fixed reason, never
  * the relayer's own message, which names addresses.
@@ -132,7 +143,7 @@ const SIGNING_PRICE_SLACK_BPS = 200n;
 
 type Params = Record<string, unknown>;
 
-const unavailable = () => refusal("unavailable");
+const unavailable = () => refusal("relayer_unavailable");
 const invalid = () => refusal("invalid_request");
 
 /**
@@ -195,6 +206,9 @@ function signedBy(signer: PublicKey, message: Uint8Array, signature: Uint8Array)
 
 type Forwarded = {
   params: { transaction: string; signer_key: string; sig_verify: false; fee_token?: string };
+  /** The transaction as it was sent in, and the pinned key it names as fee payer. */
+  decoded: VersionedTransaction;
+  feePayer: PublicKey;
   requiredRaw: bigint;
   capRaw: bigint;
   solPrice: number;
@@ -374,9 +388,10 @@ export function createRelayer(deps: RelayerDeps): Relayer {
     if (requiredRaw > capRaw) return "price_above_cap";
 
     const common = { transaction, signer_key: signerKey, sig_verify: false as const };
+    const facts = { decoded, feePayer: relayed.feePayer, requiredRaw, capRaw, solPrice: price };
     if (method === "estimateTransactionFee") {
       return params.fee_token === usdcMint
-        ? { params: { ...common, fee_token: usdcMint }, requiredRaw, capRaw, solPrice: price }
+        ? { params: { ...common, fee_token: usdcMint }, ...facts }
         : "fee_token";
     }
     if (relayed.feeRaw < (requiredRaw * (10_000n - SIGNING_PRICE_SLACK_BPS)) / 10_000n) {
@@ -387,7 +402,7 @@ export function createRelayer(deps: RelayerDeps): Relayer {
     if (!signedBy(relayed.portfolio, decoded.message.serialize(), decoded.signatures[1])) {
       return "portfolio_signature";
     }
-    return { params: common, requiredRaw, capRaw, solPrice: price };
+    return { params: common, ...facts };
   }
 
   /**
@@ -409,9 +424,20 @@ export function createRelayer(deps: RelayerDeps): Relayer {
       if (fee > sent.capRaw) return "price_above_cap";
       return { fee_in_token: Number(fee), signer_pubkey: signerKey, payment_address: payment };
     }
-    const signed = result.signed_transaction;
-    if (typeof signed !== "string" || !decode(signed)) return null;
-    return { signed_transaction: signed, signer_pubkey: signerKey };
+    // The relayer only ever adds its signature. What comes back is held to
+    // that: the same message byte for byte, the portfolio's signature
+    // untouched, and a valid signature of the pinned fee payer, which is
+    // also the transaction's id.
+    const signed = decode(result.signed_transaction);
+    if (!signed || signed.signatures.length !== 2) return null;
+    const message = sent.decoded.message.serialize();
+    if (!bytesEqual(signed.message.serialize(), message)) return null;
+    if (!bytesEqual(signed.signatures[1], sent.decoded.signatures[1])) return null;
+    if (!signedBy(sent.feePayer, message, signed.signatures[0])) return null;
+    return {
+      transaction: Buffer.from(signed.serialize()).toString("base64"),
+      signature: base58(signed.signatures[0]),
+    };
   }
 
   return {
@@ -481,13 +507,12 @@ export function createRelayer(deps: RelayerDeps): Relayer {
       const replied = await ask(upstream, replica.url, method, sent.params);
       // Never connected: this replica did not receive the request.
       if (replied.status === 503) return unavailable();
-      // The relayer turned down this server's own credentials. It did
-      // nothing with the request, and the fault is an operator's: said as
-      // such, and never as a 401, which would blame the caller's session.
-      if (codeOf(replied) === "upstream_refused") return replied;
-      // Refused for its method: the relayer did nothing with the request.
-      if (replied.status === 405) {
-        log({ event: "refusal", route: ROUTE, status: 405, reason: "upstream_refused_the_method" });
+      // Turned away for this server's credentials (logged by the relay as
+      // an operator error) or for its method: the replica did nothing with
+      // the request, so the wallet may build again for another. Never a 401,
+      // which would blame the caller's session.
+      if (codeOf(replied) === "upstream_refused" || replied.status === 405) {
+        log({ event: "refusal", route: ROUTE, status: 503, reason: "replica_refused_the_request" });
         return unavailable();
       }
       if (replied.status !== 200) return refusal("no_answer");
@@ -501,7 +526,10 @@ export function createRelayer(deps: RelayerDeps): Relayer {
         log({ event: "refusal", route: ROUTE, status: 502, reason: "answer_not_pinned_keys" });
         return refusal("no_answer");
       }
-      return answer(200, { result: safe });
+      // A price is wrapped as the relayer wraps it. A signed transaction is
+      // handed back bare, with its id: this route never broadcasts, so the
+      // wallet can record the id before anything is sent.
+      return answer(200, signing ? safe : { result: safe });
     },
   };
 }

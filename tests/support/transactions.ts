@@ -542,6 +542,13 @@ export function scenario() {
   };
 }
 
+/** What an honest relayer returns: the same transaction with the fee payer's signature added. */
+export function coSigned(encoded: string, feePayer: Keypair): string {
+  const transaction = VersionedTransaction.deserialize(Buffer.from(encoded, "base64"));
+  transaction.sign([feePayer]);
+  return Buffer.from(transaction.serialize()).toString("base64");
+}
+
 export const PYTH_ACCOUNT = "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE";
 const PYTH_RECEIVER = new PublicKey("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ");
 const SOL_USD_FEED = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";

@@ -56,10 +56,20 @@ Nothing is written to disk. A restart forgets everything, which costs one read o
 Three things here must stay the same as in `@noirwire/shared`, which the wallets run:
 
 - **The transaction template** (`src/relayer/core/relayed.ts`). The wallet reads a relayer-paid transaction with the same rules before the portfolio signs. Neither takes the other's word, so a difference only ever makes one side refuse what the other accepts.
-- **The listed trackers** (`src/chain/core/stocks.generated.json`). A copy of the catalog the wallets ship. It decides which tokens the relayer pays to send, which prices are read and which charts exist.
+- **The listed trackers** (`src/chain/core/stocks.generated.json`). A copy of the catalog the wallets ship. It decides which tokens the relayer pays to send, which prices are read and which charts exist. It is a copy because the catalog sits in the package's infrastructure entry, which loads the wallet's key handling with it. `@noirwire/shared` is a development dependency for one purpose: `tests/unit/catalog.test.ts` fails when the copy differs from the installed package's.
 - **The usage event list** (`src/events/core/usageEvents.ts`).
 
 `@solana/web3.js` and `@solana/spl-token` are pinned to the versions the wallets use.
+
+## The relayer signs; the wallet sends
+
+`POST /v1/relayer` `signTransaction` never broadcasts. The relayer is asked to sign only, and the answer is `{ transaction, signature }`: the fully signed transaction and its id. The wallet records the id durably, then sends the transaction itself through `POST /v1/rpc` `sendTransaction` (on the allow-list, under the heavy-call budget; a transaction is about 1.7 KB encoded and the route takes 64 KB).
+
+The reason is a double payment. A relayed transaction's id is the fee payer's signature, which does not exist until the relayer has signed. If the server signed and sent in one step, a wallet that died right after would hold no id to look for, would later find no trace of the action, decide it was safe to try again, and the user would pay twice. With the id in hand before anything is sent, the wallet can always ask the chain what became of it.
+
+Before the signed transaction is returned it is held to what was sent in: the same message byte for byte, the portfolio's signature untouched, and a valid signature of the pinned fee payer. A transaction that is signed and never sent costs the relayer nothing. It still counts against the signature budgets, which are taken at signing.
+
+Failover follows from the same line. Until a replica has signed, moving on is free: `getPayerSigner` tries each replica in turn, and a transaction whose own replica is unreachable or turns the request away (for this server's credentials too) is answered `503 relayer_unavailable`, so the wallet builds again for another. Once a replica has answered the signing call there is no failover: an unusable answer is a `502 no_answer`.
 
 ## Errors
 

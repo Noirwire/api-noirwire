@@ -21,6 +21,8 @@ updates:
       # here and there are compiled against the same libraries.
       - dependency-name: "@solana/web3.js"
       - dependency-name: "@solana/spl-token"
+      # Raised by hand, with the catalog copied over in the same change.
+      - dependency-name: "@noirwire/shared"
 
   - package-ecosystem: github-actions
     directory: /

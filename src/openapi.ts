@@ -25,7 +25,9 @@ const MEANING: Record<ErrorCode, string> = {
     "A provider refused this server's own credentials. An operator's to fix. Never a 401.",
   no_answer: "The relayer gave no usable answer: what it did with the request is not known.",
   unavailable:
-    "What the request needs is not available (no relayer, no price, no token keys, no identity provider). Nothing was done.",
+    "What the request needs is not available (no token keys, no identity provider). Nothing was done.",
+  relayer_unavailable:
+    "No relayer, no replica that could be used, or no price to charge by. The relayer signed nothing: the action may be built again.",
   upstream_not_reached:
     "A provider could not be connected to at all: it never received the request.",
   upstream_timeout: "A provider did not answer within the route's time limit.",

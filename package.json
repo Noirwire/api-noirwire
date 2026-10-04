@@ -41,6 +41,7 @@
     "@eslint/js": "^9.39.5",
     "@nestjs/cli": "^12.0.8",
     "@nestjs/testing": "^12.1.2",
+    "@noirwire/shared": "https://github.com/Noirwire/shared-noirwire/releases/download/v0.4.1/noirwire-shared-0.4.1.tgz",
     "@swc/core": "^1.16.13",
     "@types/express": "^5.0.6",
     "@types/node": "^24.19.1",

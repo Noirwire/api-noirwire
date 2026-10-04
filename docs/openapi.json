@@ -125,6 +125,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -174,6 +175,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -230,6 +232,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -286,6 +289,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -335,6 +339,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -384,6 +389,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -433,6 +439,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -489,6 +496,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -545,6 +553,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -628,6 +637,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -677,6 +687,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -733,6 +744,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -782,6 +794,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -831,6 +844,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -880,6 +894,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -936,6 +951,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -992,6 +1008,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1104,6 +1121,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1153,6 +1171,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1209,6 +1228,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1258,6 +1278,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1307,6 +1328,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1356,6 +1378,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1405,6 +1428,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1454,6 +1478,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1510,6 +1535,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1566,6 +1592,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1668,6 +1695,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1724,6 +1752,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1773,6 +1802,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1822,6 +1852,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1871,6 +1902,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1920,6 +1952,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -1969,6 +2002,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2025,6 +2059,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2081,6 +2116,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2171,6 +2207,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2227,6 +2264,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2276,6 +2314,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2325,6 +2364,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2374,6 +2414,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2423,6 +2464,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2540,6 +2582,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2596,6 +2639,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2645,6 +2689,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2694,6 +2739,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2790,6 +2836,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2839,6 +2886,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2888,6 +2936,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2937,6 +2986,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -2986,6 +3036,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3035,6 +3086,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3151,6 +3203,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3200,6 +3253,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3256,6 +3310,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3305,6 +3360,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3354,6 +3410,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3403,6 +3460,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3452,6 +3510,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3501,6 +3560,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3584,6 +3644,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3640,6 +3701,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3689,6 +3751,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3738,6 +3801,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3765,7 +3829,7 @@
         "tags": ["Fee relayer"]
       },
       "post": {
-        "description": "The wallets' only way to the fee relayer: a server that signs a transaction as its fee payer, so a portfolio that holds no SOL can still act, and is paid back in USDC inside that same transaction. The relayer's address, API key and signing secret stay on this server.\n\n**Who calls it:** the wallets, when a send, an Earn deposit or withdrawal, or opening a holding is paid for in USDC.\n\nThree methods, one call per request (a JSON array is refused):\n\n| `method` | `params` | Answer |\n| --- | --- | --- |\n| `getPayerSigner` | optional `not`: fee payers just seen to fail | The fee payer of a replica that answered, and the payment wallet |\n| `estimateTransactionFee` | `transaction`, `signer_key`, `fee_token` (USDC) | What this transaction must pay, in raw USDC units |\n| `signTransaction` | `transaction`, `signer_key` | The same transaction with the fee payer's signature added |\n\n**This is not a signing service, and the session does not make it one.** A session token proves nothing about who holds it, so every check below is made on the transaction itself, for a price and for a signature alike, before the relayer hears of it:\n\n- It is a legacy transaction with no address lookup table, so every account is in plain sight.\n- Its fee payer is one of the pinned keys and equals `signer_key`; the only other signer is one portfolio.\n- It carries no priority fee and no System instruction (which also rules out a durable nonce).\n- Its instructions are, in order and with nothing else: at most one idempotent creation of a token account funded by the fee payer; at most one action; and the payment.\n- The action is a transfer of USDC or a listed tracker out of the portfolio's own account, or Jupiter Lend's deposit or withdrawal for this portfolio in the one layout its API builds.\n- An account is opened only for the action beside it: the recipient's account for the token sent, or the portfolio's own account for what it is paid in.\n- The payment is one USDC transfer from the portfolio's own account into the pinned payment wallet's account, no larger than a fixed cap (0.05 USDC, or 2.5 USDC when an account is opened).\n- The fee payer appears nowhere except as the funder of that one account.\n\n**The price is set here, not by the relayer:** twice the network fee, plus, for an account the relayer opens, that account's rent and a tenth more. The rent is that of the account the mint really needs, read from the chain, and is charged whether or not the account already exists. The SOL price is read by this server from Pyth's SOL/USD account, independently of the relayer, used for at most thirty seconds, refused when stale or uncertain, and never taken below a fixed floor. Nothing is priced or signed while it and the price behind the relayer's own estimate differ by more than 5%.\n\n**Before a signature**, on top of all of the above: the payment must cover this server's price (to within 2% for a price that moved since the review), the transaction must already carry the portfolio's own valid signature, and the relayer is asked what it would charge first. Signatures are rationed: 10 a minute per session, 30 a minute per address, and 60 a minute and 600 an hour in total, whoever asks. A transaction that was refused is not counted against the total.\n\n**Replicas.** Each relayer replica signs as its own key. `getPayerSigner` asks them in random order and returns the first that answers as the key pinned for it; one that does not answer is passed over, which costs nothing because nothing is signed yet. A built transaction names its fee payer, so only that replica is ever asked to price or sign it. A `503` means the replica never received the request, so the wallet may build again for another; a `502` means what the replica did is not known, and the wallet must let the chain settle before trying again.\n\n**Contains wallet addresses: yes.** The transaction names the portfolio, its counterparty and the amount. **Received by:** the relayer (a NoirWire service) and, through it, its RPC provider, from this server's address and never the caller's. One relayed transaction names one portfolio and never the funding wallet.\n\n**Forwarded upstream:** only the named parameters, rebuilt here, with `sig_verify` always false and authentication computed by this server. Nothing else in the request body and no header of the caller's travels. **Returned:** only the fields listed, and only when every key in the relayer's answer is one this server pins. The relayer's own messages name accounts and are never passed on.\n\n**On-chain, regardless:** a relayed transaction names NoirWire's fee payer and pays its USDC account, so anyone can see that a portfolio used the relayer. That is public whatever this API does.\n\n**Quotas (per minute):** 60 per session, 600 per address, 3,000 in total, plus the signature budgets above.\n\n**Logged:** the route, the status, the duration, and for a refusal one fixed word (such as `insufficient_payment`). Never an address, an amount, a transaction or the relayer's message.",
+        "description": "The wallets' only way to the fee relayer: a server that signs a transaction as its fee payer, so a portfolio that holds no SOL can still act, and is paid back in USDC inside that same transaction. The relayer's address, API key and signing secret stay on this server.\n\n**Who calls it:** the wallets, when a send, an Earn deposit or withdrawal, or opening a holding is paid for in USDC.\n\nThree methods, one call per request (a JSON array is refused):\n\n| `method` | `params` | Answer |\n| --- | --- | --- |\n| `getPayerSigner` | optional `not`: fee payers just seen to fail | The fee payer of a replica that answered, and the payment wallet |\n| `estimateTransactionFee` | `transaction`, `signer_key`, `fee_token` (USDC) | What this transaction must pay, in raw USDC units |\n| `signTransaction` | `transaction`, `signer_key` | `{ transaction, signature }`: the same transaction with the fee payer's signature added, and its id |\n\n**This is not a signing service, and the session does not make it one.** A session token proves nothing about who holds it, so every check below is made on the transaction itself, for a price and for a signature alike, before the relayer hears of it:\n\n- It is a legacy transaction with no address lookup table, so every account is in plain sight.\n- Its fee payer is one of the pinned keys and equals `signer_key`; the only other signer is one portfolio.\n- It carries no priority fee and no System instruction (which also rules out a durable nonce).\n- Its instructions are, in order and with nothing else: at most one idempotent creation of a token account funded by the fee payer; at most one action; and the payment.\n- The action is a transfer of USDC or a listed tracker out of the portfolio's own account, or Jupiter Lend's deposit or withdrawal for this portfolio in the one layout its API builds.\n- An account is opened only for the action beside it: the recipient's account for the token sent, or the portfolio's own account for what it is paid in.\n- The payment is one USDC transfer from the portfolio's own account into the pinned payment wallet's account, no larger than a fixed cap (0.05 USDC, or 2.5 USDC when an account is opened).\n- The fee payer appears nowhere except as the funder of that one account.\n\n**The price is set here, not by the relayer:** twice the network fee, plus, for an account the relayer opens, that account's rent and a tenth more. The rent is that of the account the mint really needs, read from the chain, and is charged whether or not the account already exists. The SOL price is read by this server from Pyth's SOL/USD account, independently of the relayer, used for at most thirty seconds, refused when stale or uncertain, and never taken below a fixed floor. Nothing is priced or signed while it and the price behind the relayer's own estimate differ by more than 5%.\n\n**Before a signature**, on top of all of the above: the payment must cover this server's price (to within 2% for a price that moved since the review), the transaction must already carry the portfolio's own valid signature, and the relayer is asked what it would charge first. Signatures are rationed: 10 a minute per session, 30 a minute per address, and 60 a minute and 600 an hour in total, whoever asks. A transaction that was refused is not counted against the total.\n\n**Signing never broadcasts.** The relayer is asked to sign only. The answer is `{ transaction, signature }`: the fully signed transaction in base64, and its id in base58 (the fee payer's signature, which exists only once the relayer has signed). Before it is returned, it is checked to be the transaction that was sent in: the same message byte for byte, the portfolio's signature untouched, and a valid signature of the pinned fee payer. The wallet records the `signature` durably and then sends the transaction itself with `POST /v1/rpc` `sendTransaction`. This order is the point: if this server sent it, a wallet that died right after would hold no id to look for, could conclude the action never went through, and the user would pay twice. A transaction that is signed and never sent costs the relayer nothing, but it still counts against the signature budgets, which are taken at signing.\n\n**Replicas and failover.** Each relayer replica signs as its own key. `getPayerSigner` asks them in random order and returns the first that answers as the key pinned for it; one that is unreachable, errors, or refuses this server's credentials is passed over for the next, which costs nothing because nothing is signed yet. Only when every replica has failed is the answer `503 relayer_unavailable`. A built transaction names its fee payer, so only that replica can price or sign it: if it is unreachable or turns the request away before signing (including for this server's credentials, which is never reported as a `401`), the answer is the same `503 relayer_unavailable`, nothing was signed, and the wallet builds again for another replica. Once a replica has answered the signing call there is no failover: an answer this server cannot use is a `502 no_answer`, what the replica did is not known, and the wallet must let the chain settle that transaction before trying again.\n\n**Contains wallet addresses: yes.** The transaction names the portfolio, its counterparty and the amount. **Received by:** the relayer (a NoirWire service) and, through it, its RPC provider, from this server's address and never the caller's. One relayed transaction names one portfolio and never the funding wallet.\n\n**Forwarded upstream:** only the named parameters, rebuilt here, with `sig_verify` always false and authentication computed by this server. Nothing else in the request body and no header of the caller's travels. **Returned:** only the fields listed, and only when every key in the relayer's answer is one this server pins. The relayer's own messages name accounts and are never passed on.\n\n**On-chain, regardless:** a relayed transaction names NoirWire's fee payer and pays its USDC account, so anyone can see that a portfolio used the relayer. That is public whatever this API does.\n\n**Quotas (per minute):** 60 per session, 600 per address, 3,000 in total, plus the signature budgets above.\n\n**Logged:** the route, the status, the duration, and for a refusal one fixed word (such as `insufficient_payment`). Never an address, an amount, a transaction or the relayer's message.",
         "operationId": "RelayerController_call",
         "parameters": [],
         "requestBody": {
@@ -3862,12 +3926,10 @@
                     }
                   },
                   "sign": {
-                    "summary": "signTransaction",
+                    "summary": "signTransaction: signed, not broadcast. Record `signature`, then send it yourself",
                     "value": {
-                      "result": {
-                        "signed_transaction": "AQAAAA...base64...AAAA=",
-                        "signer_pubkey": "11111111111111111111111111111111"
-                      }
+                      "transaction": "AQAAAA...base64...AAAA=",
+                      "signature": "ExampLeSignature1111111111111111111111111111111111111111111111111111111111111111111111"
                     }
                   }
                 }
@@ -3902,6 +3964,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -3951,6 +4014,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4007,6 +4071,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4063,6 +4128,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4112,6 +4178,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4161,6 +4228,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4217,6 +4285,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4239,7 +4308,7 @@
             }
           },
           "502": {
-            "description": "The relayer was reached and gave no answer this server can use. `no_answer`: it answered with an error status, with something unreadable, or with keys this server does not pin, so what it did with the request is not known; for a signature, treat the transaction as possibly signed. `upstream_refused`: it turned down this server's own credentials (it answered 401 or 403); that is an operator's to fix, is logged as such, and is never passed on as a 401.",
+            "description": "The relayer answered the call and this server cannot use the answer: an error status, something unreadable, keys this server does not pin, or a signed transaction that is not the one sent in with a valid fee payer signature. What it did with the request is not known. For a signature, treat the transaction as possibly signed, and do not build it again until the chain has settled it.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4266,6 +4335,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4282,20 +4352,13 @@
                       "code": "no_answer",
                       "error": "The relayer gave no usable answer. What it did with the request is not known."
                     }
-                  },
-                  "upstream_refused": {
-                    "summary": "The relayer refused this server's credentials",
-                    "value": {
-                      "code": "upstream_refused",
-                      "error": "The provider refused this server's own credentials."
-                    }
                   }
                 }
               }
             }
           },
           "503": {
-            "description": "There is no relayer, no replica could be used, no SOL price or rent could be read to charge by, or the replica never received the request. Nothing was signed. (Also: the token keys could not be read.)",
+            "description": "`relayer_unavailable`: nothing was signed, so the action may be built again, for another replica if there is one. A replica that refuses this server's own credentials lands here too (and is logged as an operator error): never as a `401`. `unavailable`: the token keys could not be read.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4322,6 +4385,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4337,6 +4401,13 @@
                     "value": {
                       "code": "unavailable",
                       "error": "The service this request needs is not available. Nothing was done."
+                    }
+                  },
+                  "relayer_unavailable": {
+                    "summary": "No relayer, every replica failed, no price to charge by, or this transaction's replica is unreachable or turned the request away before signing",
+                    "value": {
+                      "code": "relayer_unavailable",
+                      "error": "The relayer could not be used. Nothing was signed."
                     }
                   }
                 }
@@ -4402,6 +4473,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4458,6 +4530,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4507,6 +4580,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4556,6 +4630,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4605,6 +4680,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4654,6 +4730,7 @@
                         "upstream_refused",
                         "no_answer",
                         "unavailable",
+                        "relayer_unavailable",
                         "upstream_not_reached",
                         "upstream_timeout",
                         "response_timeout"
@@ -4684,7 +4761,7 @@
   },
   "info": {
     "title": "NoirWire API",
-    "description": "The NoirWire API stands between the NoirWire wallets (web and mobile) and every outside service a wallet has to ask: the Solana RPC provider, Jupiter, MagicBlock's private payments, NoirWire's fee relayer, the price sources and NoirWire's analytics server. A wallet talks only to this API, so each of those services sees this server's address and never a user's next to the wallet addresses it is asked about.\n\n## Sessions\n\nEvery `/v1` route except the two session routes requires `Authorization: Bearer <accessToken>`. A wallet gets a token from `POST /v1/session` and renews it at `POST /v1/session/refresh`.\n\n- **What a session proves:** that this API issued it and that it has not expired.\n- **What it does not prove:** anything about who holds it. It is not a login. It names no person, no wallet and no device; anyone can get one, and anyone can get another.\n- **What it is for:** counting. A session is a quota bucket, so limits can be kept per caller and not only per network address.\n- **How long it lasts:** an access token lives about an hour (`expiresAt`, Unix time in seconds). A session as a whole is refused after a maximum age (24 hours by default), on every route and at refresh, with a `401` whose code is `session_expired`. The wallet then starts a new, unrelated session, so the key that joins one wallet's requests together does not live long.\n- **Nothing that guards money depends on it.** The fee relayer's checks are made on the transaction itself and are the same for every caller: see `POST /v1/relayer`.\n\n## What contains wallet addresses, and who receives it\n\n| Route | Carries addresses | Passed to |\n| --- | --- | --- |\n| `POST /v1/rpc` | Yes: the address read, or a whole transaction | The RPC provider |\n| `POST /v1/jupiter/*` | Yes: the portfolio that trades or lends | Jupiter |\n| `GET /v1/jupiter/*` | No | Jupiter |\n| `POST /v1/private-payments/*` | Yes: the funding wallet and the portfolio together | MagicBlock |\n| `POST /v1/relayer` | Yes: the portfolio, its counterparty and the amount | NoirWire's relayer and its RPC provider |\n| `GET /v1/relayer` | No | Nobody |\n| `GET /v1/prices`, `GET /v1/history/...` | No | Jupiter, asked by this server on its own schedule, not per caller |\n| `POST /v1/events` | No: the closed event list has no field for one | NoirWire's analytics server |\n| `POST /v1/session`, `POST /v1/session/refresh` | No | The identity provider (Supabase Auth), asked by this server |\n\nA provider receives the request's content, a fixed user agent and this server's own credentials for it. It never receives the caller's IP address, token, session id, origin, referer, cookies or browser name. Coming back, only a status and a JSON body pass, up to a size cap per route; a provider's headers, and any body that is not JSON, never do.\n\nEach provider still learns what it is asked. The RPC provider sees every address read and every transaction sent, and all of one wallet's requests reach it from this server moments apart, so it can guess which addresses belong together by timing. MagicBlock sees both ends of a private transfer. This API removes the caller's network address from those pictures; it does not remove the pictures.\n\n## What this API logs and keeps\n\n- **Stored:** nothing. There is no database.\n- **Logged:** one line per request with the route's pattern, the status code and the duration, plus, for a refusal or an upstream failure, one fixed word. Never a token, a session id, an address, a transaction, an IP address, a request body or a query string.\n- **Held in memory:** counters keyed by session id and by client address, each for one minute (one hour for the hourly budgets), then dropped. Cached public market data.\n- **This server does see** every request in transit, including its addresses and the caller's IP. That it keeps none of it is a property of this code, which is published so it can be read.\n\n## Quotas and errors\n\nEach route counts a request three times: against the session, against the client address, and against a total for the route, each per minute. A request the web app's own server forwards arrives from that server's address, which is why the session is counted first and the address allowance is larger. When any of the three is spent the answer is `429` with code `rate_limited` and nothing was done; retry with backoff. A provider's own `429` is passed on the same way. The numbers are stated on each route. Counters live in the memory of one process and are not hard limits.\n\nEvery answer is JSON (or empty), with a fixed JSON content type, and is never cacheable (`Cache-Control: no-store`).\n\n## Errors\n\nEvery error this API writes has one shape, and nothing else in it: no stack trace, no provider message and nothing echoed from the request.\n\n```json\n{ \"code\": \"rate_limited\", \"error\": \"Too many requests. Wait and try again.\" }\n```\n\n`code` is stable and is what a client acts on. `error` is a plain sentence for a person and may be reworded. Every code, and the one status it comes with:\n\n| Code | Status | Meaning |\n| --- | --- | --- |\n| `invalid_request` | `400` | The body, a field or the query is not what the route takes. Nothing was done. |\n| `unauthorized` | `401` | No session token, or one that does not verify. Start or refresh a session. |\n| `session_expired` | `401` | The session is past its maximum age. Start a new one with `POST /v1/session`. |\n| `session_invalid` | `401` | The refresh token is unknown, already used or revoked. Start a new session. |\n| `origin_not_allowed` | `403` | A browser on an origin that is not on this API's list. |\n| `method_not_allowed` | `403` | A JSON-RPC or relayer method outside the route's list. Nothing was done. |\n| `not_found` | `404` | No such route, or a path, symbol or range outside a route's list. |\n| `request_timeout` | `408` | The body did not arrive within 5 seconds. |\n| `request_too_large` | `413` | The body is over the route's size cap. |\n| `refused` | `422` | The relayer route refused the transaction. Nothing was signed. |\n| `insufficient_payment` | `422` | The relayed transaction pays less than the current price. Ask for a new price. |\n| `rate_limited` | `429` | A quota is spent, or a provider is rate limiting. Nothing was done. Retry with backoff. |\n| `internal_error` | `500` | An unexpected failure in this API. |\n| `upstream_failed` | `502` | A provider's answer was not JSON, was too large, or its connection broke. |\n| `upstream_refused` | `502` | A provider refused this server's own credentials. An operator's to fix. Never a 401. |\n| `no_answer` | `502` | The relayer gave no usable answer: what it did with the request is not known. |\n| `unavailable` | `503` | What the request needs is not available (no relayer, no price, no token keys, no identity provider). Nothing was done. |\n| `upstream_not_reached` | `503` | A provider could not be connected to at all: it never received the request. |\n| `upstream_timeout` | `504` | A provider did not answer within the route's time limit. |\n| `response_timeout` | `504` | This API did not finish answering within 60 seconds. |\n\n**A `401` means one thing only: the session token is not accepted here.** A wallet may therefore read a `401` on a submit as \"nothing was sent\". A provider that refuses this server's own credentials (it answers 401 or 403 to this server) is never passed on as a 401 or a 403: it is a `502` with code `upstream_refused`, and is logged as an operator error.\n\nA provider's own error body (a Jupiter quote that cannot be filled, a JSON-RPC error from the RPC provider) is not one of this API's errors: it is passed back as the provider wrote it, with the provider's status, provided it is JSON. The exceptions are a provider's `401` and `403` (see above) and its `429`, which becomes this API's `rate_limited`.\n\n## What no API can hide\n\nEverything a wallet does on Solana is public: balances, transfers, trades and the accounts involved can be read by anyone, for ever, whatever route the request took. This API keeps a user's network address away from the services that see their wallet addresses. It does not make on-chain activity private.\n\nAll values in the examples are dummies.",
+    "description": "The NoirWire API stands between the NoirWire wallets (web and mobile) and every outside service a wallet has to ask: the Solana RPC provider, Jupiter, MagicBlock's private payments, NoirWire's fee relayer, the price sources and NoirWire's analytics server. A wallet talks only to this API, so each of those services sees this server's address and never a user's next to the wallet addresses it is asked about.\n\n## Sessions\n\nEvery `/v1` route except the two session routes requires `Authorization: Bearer <accessToken>`. A wallet gets a token from `POST /v1/session` and renews it at `POST /v1/session/refresh`.\n\n- **What a session proves:** that this API issued it and that it has not expired.\n- **What it does not prove:** anything about who holds it. It is not a login. It names no person, no wallet and no device; anyone can get one, and anyone can get another.\n- **What it is for:** counting. A session is a quota bucket, so limits can be kept per caller and not only per network address.\n- **How long it lasts:** an access token lives about an hour (`expiresAt`, Unix time in seconds). A session as a whole is refused after a maximum age (24 hours by default), on every route and at refresh, with a `401` whose code is `session_expired`. The wallet then starts a new, unrelated session, so the key that joins one wallet's requests together does not live long.\n- **Nothing that guards money depends on it.** The fee relayer's checks are made on the transaction itself and are the same for every caller: see `POST /v1/relayer`.\n\n## What contains wallet addresses, and who receives it\n\n| Route | Carries addresses | Passed to |\n| --- | --- | --- |\n| `POST /v1/rpc` | Yes: the address read, or a whole transaction | The RPC provider |\n| `POST /v1/jupiter/*` | Yes: the portfolio that trades or lends | Jupiter |\n| `GET /v1/jupiter/*` | No | Jupiter |\n| `POST /v1/private-payments/*` | Yes: the funding wallet and the portfolio together | MagicBlock |\n| `POST /v1/relayer` | Yes: the portfolio, its counterparty and the amount | NoirWire's relayer and its RPC provider |\n| `GET /v1/relayer` | No | Nobody |\n| `GET /v1/prices`, `GET /v1/history/...` | No | Jupiter, asked by this server on its own schedule, not per caller |\n| `POST /v1/events` | No: the closed event list has no field for one | NoirWire's analytics server |\n| `POST /v1/session`, `POST /v1/session/refresh` | No | The identity provider (Supabase Auth), asked by this server |\n\nA provider receives the request's content, a fixed user agent and this server's own credentials for it. It never receives the caller's IP address, token, session id, origin, referer, cookies or browser name. Coming back, only a status and a JSON body pass, up to a size cap per route; a provider's headers, and any body that is not JSON, never do.\n\nEach provider still learns what it is asked. The RPC provider sees every address read and every transaction sent, and all of one wallet's requests reach it from this server moments apart, so it can guess which addresses belong together by timing. MagicBlock sees both ends of a private transfer. This API removes the caller's network address from those pictures; it does not remove the pictures.\n\n## What this API logs and keeps\n\n- **Stored:** nothing. There is no database.\n- **Logged:** one line per request with the route's pattern, the status code and the duration, plus, for a refusal or an upstream failure, one fixed word. Never a token, a session id, an address, a transaction, an IP address, a request body or a query string.\n- **Held in memory:** counters keyed by session id and by client address, each for one minute (one hour for the hourly budgets), then dropped. Cached public market data.\n- **This server does see** every request in transit, including its addresses and the caller's IP. That it keeps none of it is a property of this code, which is published so it can be read.\n\n## Quotas and errors\n\nEach route counts a request three times: against the session, against the client address, and against a total for the route, each per minute. A request the web app's own server forwards arrives from that server's address, which is why the session is counted first and the address allowance is larger. When any of the three is spent the answer is `429` with code `rate_limited` and nothing was done; retry with backoff. A provider's own `429` is passed on the same way. The numbers are stated on each route. Counters live in the memory of one process and are not hard limits.\n\nEvery answer is JSON (or empty), with a fixed JSON content type, and is never cacheable (`Cache-Control: no-store`).\n\n## Errors\n\nEvery error this API writes has one shape, and nothing else in it: no stack trace, no provider message and nothing echoed from the request.\n\n```json\n{ \"code\": \"rate_limited\", \"error\": \"Too many requests. Wait and try again.\" }\n```\n\n`code` is stable and is what a client acts on. `error` is a plain sentence for a person and may be reworded. Every code, and the one status it comes with:\n\n| Code | Status | Meaning |\n| --- | --- | --- |\n| `invalid_request` | `400` | The body, a field or the query is not what the route takes. Nothing was done. |\n| `unauthorized` | `401` | No session token, or one that does not verify. Start or refresh a session. |\n| `session_expired` | `401` | The session is past its maximum age. Start a new one with `POST /v1/session`. |\n| `session_invalid` | `401` | The refresh token is unknown, already used or revoked. Start a new session. |\n| `origin_not_allowed` | `403` | A browser on an origin that is not on this API's list. |\n| `method_not_allowed` | `403` | A JSON-RPC or relayer method outside the route's list. Nothing was done. |\n| `not_found` | `404` | No such route, or a path, symbol or range outside a route's list. |\n| `request_timeout` | `408` | The body did not arrive within 5 seconds. |\n| `request_too_large` | `413` | The body is over the route's size cap. |\n| `refused` | `422` | The relayer route refused the transaction. Nothing was signed. |\n| `insufficient_payment` | `422` | The relayed transaction pays less than the current price. Ask for a new price. |\n| `rate_limited` | `429` | A quota is spent, or a provider is rate limiting. Nothing was done. Retry with backoff. |\n| `internal_error` | `500` | An unexpected failure in this API. |\n| `upstream_failed` | `502` | A provider's answer was not JSON, was too large, or its connection broke. |\n| `upstream_refused` | `502` | A provider refused this server's own credentials. An operator's to fix. Never a 401. |\n| `no_answer` | `502` | The relayer gave no usable answer: what it did with the request is not known. |\n| `unavailable` | `503` | What the request needs is not available (no token keys, no identity provider). Nothing was done. |\n| `relayer_unavailable` | `503` | No relayer, no replica that could be used, or no price to charge by. The relayer signed nothing: the action may be built again. |\n| `upstream_not_reached` | `503` | A provider could not be connected to at all: it never received the request. |\n| `upstream_timeout` | `504` | A provider did not answer within the route's time limit. |\n| `response_timeout` | `504` | This API did not finish answering within 60 seconds. |\n\n**A `401` means one thing only: the session token is not accepted here.** A wallet may therefore read a `401` on a submit as \"nothing was sent\". A provider that refuses this server's own credentials (it answers 401 or 403 to this server) is never passed on as a 401 or a 403: it is a `502` with code `upstream_refused`, and is logged as an operator error.\n\nA provider's own error body (a Jupiter quote that cannot be filled, a JSON-RPC error from the RPC provider) is not one of this API's errors: it is passed back as the provider wrote it, with the provider's status, provided it is JSON. The exceptions are a provider's `401` and `403` (see above) and its `429`, which becomes this API's `rate_limited`.\n\n## What no API can hide\n\nEverything a wallet does on Solana is public: balances, transfers, trades and the accounts involved can be read by anyone, for ever, whatever route the request took. This API keeps a user's network address away from the services that see their wallet addresses. It does not make on-chain activity private.\n\nAll values in the examples are dummies.",
     "version": "1",
     "contact": {}
   },

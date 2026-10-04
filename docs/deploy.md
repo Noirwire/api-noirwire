@@ -161,4 +161,4 @@ Requests the web app's server forwards arrive from that server's addresses, not 
 - A setting in `.railway/railway.ts`: edit, `railway config plan`, `railway config apply`.
 - A secret: `railway variable set NAME --stdin --service api`.
 - A second relayer replica: add its private URL to `KORA_URLS` in `.railway/railway.ts` and its fee payer to `KORA_FEE_PAYERS`, in the same position. The service refuses to start if the two lists do not match one to one.
-- The trackers the wallets list: `src/chain/core/stocks.generated.json` is a copy of the catalog in `@noirwire/shared`. Copy the new file over and deploy when that catalog changes, or a newly listed tracker has no price, no chart and cannot be sent through the relayer.
+- The trackers the wallets list: `src/chain/core/stocks.generated.json` is a copy of the catalog in `@noirwire/shared`. When that catalog changes, raise the `@noirwire/shared` version in `package.json`: the unit suite then fails until the new file is copied over. Until it is deployed, a newly listed tracker has no price, no chart and cannot be sent through the relayer.

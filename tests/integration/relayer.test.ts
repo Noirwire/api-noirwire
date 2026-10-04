@@ -1,7 +1,15 @@
 import { createHmac } from "node:crypto";
-import { Keypair, type VersionedTransaction } from "@solana/web3.js";
+import { Keypair, VersionedTransaction } from "@solana/web3.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { ataFor, OPENING_FEE, PLAIN_FEE, scenario, USDC } from "../support/transactions.js";
+import { base58 } from "../../src/chain/core/bytes.js";
+import {
+  ataFor,
+  coSigned,
+  OPENING_FEE,
+  PLAIN_FEE,
+  scenario,
+  USDC,
+} from "../support/transactions.js";
 import { startApi, type Api } from "./support/harness.js";
 import type { Received, Reply } from "./support/providers.js";
 
@@ -25,8 +33,9 @@ let api: Api;
 
 /** A Kora replica that signs as `feePayer` and prices at `price` dollars a SOL. */
 const kora =
-  (feePayer: string, price = SOL_PRICE) =>
+  (key: Keypair, price = SOL_PRICE, as = key.publicKey.toBase58()) =>
   (request: Received): Reply => {
+    const feePayer = as;
     const { method, params } = JSON.parse(request.body) as {
       method: string;
       params?: { transaction: string };
@@ -41,7 +50,7 @@ const kora =
               signer_pubkey: feePayer,
               payment_address: PAYMENT_WALLET,
             }
-          : { signed_transaction: params!.transaction, signer_pubkey: feePayer };
+          : { signed_transaction: coSigned(params!.transaction, key), signer_pubkey: feePayer };
     return { body: { jsonrpc: "2.0", id: 1, result } };
   };
 
@@ -79,8 +88,8 @@ async function startApiWithRelayer(): Promise<Api> {
 
 beforeEach(() => {
   api.providers.reset();
-  api.providers.answer("kora-1", kora(FEE_PAYER_1));
-  api.providers.answer("kora-2", kora(FEE_PAYER_2));
+  api.providers.answer("kora-1", kora(first.relayer));
+  api.providers.answer("kora-2", kora(second));
   api.logged.length = 0;
 });
 
@@ -138,7 +147,12 @@ describe("POST /v1/relayer", () => {
     });
     expect(response.status).toBe(200);
     expect(response.json).toEqual({
-      result: { signed_transaction: encode(transaction), signer_pubkey: FEE_PAYER_1 },
+      transaction: coSigned(encode(transaction), first.relayer),
+      signature: base58(
+        VersionedTransaction.deserialize(
+          Buffer.from(coSigned(encode(transaction), first.relayer), "base64"),
+        ).signatures[0],
+      ),
     });
 
     const calls = api.providers.sentTo("kora-1");
@@ -159,6 +173,48 @@ describe("POST /v1/relayer", () => {
     expect(Math.abs(Number(sent.headers["x-timestamp"]) - Date.now() / 1000)).toBeLessThan(10);
     expect(sent.headers.authorization).toBeUndefined();
     expect(JSON.stringify(sent)).not.toContain(token);
+    expect(api.providers.sentTo("kora-2")).toHaveLength(0);
+  });
+
+  it("only has the transaction signed: the server never broadcasts it", async () => {
+    const response = await relayer(
+      "signTransaction",
+      signParams(signedByPortfolio(genuine.sendUsdc())),
+    );
+    expect(response.status).toBe(200);
+    // The relayer was asked to sign, never to send.
+    expect(koraCalls().map(methodOf)).toEqual(["estimateTransactionFee", "signTransaction"]);
+    // And this server asked its RPC provider for a price and nothing else.
+    const asked = api.providers.sentTo("rpc").map((sent) => JSON.parse(sent.body).method);
+    expect(asked).not.toContain("sendTransaction");
+    expect(asked.every((method) => method === "getAccountInfo")).toBe(true);
+
+    // The wallet sends it itself, through the RPC route, which takes one this size.
+    const sent = await api.call("/v1/rpc", {
+      body: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "sendTransaction",
+        params: [response.json.transaction, { encoding: "base64" }],
+      },
+    });
+    expect(sent.status).toBe(200);
+  });
+
+  it("returns nothing the relayer changed: an answer without a valid fee payer signature is a 502", async () => {
+    api.providers.answer("kora-1", (request) => {
+      if (methodOf(request) !== "signTransaction") return kora(first.relayer)(request);
+      const { params } = JSON.parse(request.body) as { params: { transaction: string } };
+      return {
+        body: { result: { signed_transaction: params.transaction, signer_pubkey: FEE_PAYER_1 } },
+      };
+    });
+    const response = await relayer(
+      "signTransaction",
+      signParams(signedByPortfolio(genuine.sendUsdc())),
+    );
+    expect([response.status, response.json.code]).toEqual([502, "no_answer"]);
+    // A replica answered: no other replica is tried.
     expect(api.providers.sentTo("kora-2")).toHaveLength(0);
   });
 
@@ -229,7 +285,7 @@ describe("POST /v1/relayer", () => {
   });
 
   it("prices and signs nothing while its SOL price and the relayer's disagree, or without a price", async () => {
-    api.providers.answer("kora-1", kora(FEE_PAYER_1, SOL_PRICE * 1.2));
+    api.providers.answer("kora-1", kora(first.relayer, SOL_PRICE * 1.2));
     const priced = await relayer("estimateTransactionFee", estimateParams(genuine.sendUsdc()));
     expect([priced.status, priced.json.code]).toEqual([422, "refused"]);
     const signed = await relayer(
@@ -265,27 +321,31 @@ describe("POST /v1/relayer", () => {
     }
   });
 
-  it("never answers 401 because the relayer refused this server's credentials", async () => {
-    api.providers.answer("kora-1", (request) =>
-      methodOf(request) === "signTransaction"
-        ? { status: 401, body: "" }
-        : kora(FEE_PAYER_1)(request),
-    );
-    const response = await relayer(
-      "signTransaction",
-      signParams(signedByPortfolio(genuine.sendUsdc())),
-    );
-    expect(response.status).toBe(502);
-    expect(response.json).toEqual({
-      code: "upstream_refused",
-      error: "The provider refused this server's own credentials.",
-    });
-    expect(api.logged).toContainEqual({
-      event: "operator_error",
-      route: "relayer",
-      status: 401,
-      reason: "upstream_refused_credentials",
-    });
+  it("answers 503, never 401, when the replica refuses this server's credentials", async () => {
+    for (const status of [401, 403]) {
+      api.logged.length = 0;
+      api.providers.answer("kora-1", (request) =>
+        methodOf(request) === "signTransaction"
+          ? { status, body: "" }
+          : kora(first.relayer)(request),
+      );
+      const response = await relayer(
+        "signTransaction",
+        signParams(signedByPortfolio(genuine.sendUsdc())),
+      );
+      expect(response.status).toBe(503);
+      expect(response.json).toEqual({
+        code: "relayer_unavailable",
+        error: "The relayer could not be used. Nothing was signed.",
+      });
+      expect(response.headers.get("www-authenticate")).toBeNull();
+      expect(api.logged).toContainEqual({
+        event: "operator_error",
+        route: "relayer",
+        status,
+        reason: "upstream_refused_credentials",
+      });
+    }
   });
 
   describe("replica failover", () => {
@@ -302,8 +362,40 @@ describe("POST /v1/relayer", () => {
       expect(await payer()).toBe(503);
     });
 
+    it("moves on from a replica that refuses this server's credentials, and from one that errors", async () => {
+      for (const status of [401, 403, 500]) {
+        api.providers.answer("kora-1", () => ({ status, body: "" }));
+        for (let i = 0; i < 6; i += 1) expect(await payer()).toBe(FEE_PAYER_2);
+      }
+      // Every replica failed: 503, never 401.
+      api.providers.answer("kora-2", () => ({ status: 401, body: "" }));
+      const response = await relayer("getPayerSigner");
+      expect([response.status, response.json.code]).toEqual([503, "relayer_unavailable"]);
+    });
+
+    it("says a replica that could not be connected to never had the transaction", async () => {
+      const unreachable = await startApi({
+        KORA_URLS: "http://127.0.0.1:9",
+        KORA_API_KEY: "the-api-key",
+        KORA_HMAC_SECRET: "the-hmac-secret",
+        KORA_FEE_PAYERS: FEE_PAYER_1,
+        KORA_PAYMENT_WALLET: PAYMENT_WALLET,
+      });
+      try {
+        const response = await unreachable.call("/v1/relayer", {
+          body: {
+            method: "signTransaction",
+            params: signParams(signedByPortfolio(genuine.sendUsdc())),
+          },
+        });
+        expect([response.status, response.json.code]).toEqual([503, "relayer_unavailable"]);
+      } finally {
+        await unreachable.close();
+      }
+    });
+
     it("passes over a replica that answers as a key this server does not pin for it", async () => {
-      api.providers.answer("kora-1", kora(FEE_PAYER_2));
+      api.providers.answer("kora-1", kora(first.relayer, SOL_PRICE, FEE_PAYER_2));
       for (let i = 0; i < 8; i += 1) expect(await payer()).toBe(FEE_PAYER_2);
     });
 
@@ -325,11 +417,11 @@ describe("POST /v1/relayer", () => {
       // Its replica down: the wallet is told nothing was signed, and no
       // other replica is handed a transaction it cannot sign.
       api.providers.reset();
-      api.providers.answer("kora-1", kora(FEE_PAYER_1));
+      api.providers.answer("kora-1", kora(first.relayer));
       api.providers.answer("kora-2", down);
       forSecond.sign([portfolio]);
       const signed = await relayer("signTransaction", signParams(forSecond, FEE_PAYER_2));
-      expect([signed.status, signed.json.code]).toEqual([503, "unavailable"]);
+      expect([signed.status, signed.json.code]).toEqual([503, "relayer_unavailable"]);
       expect(api.providers.sentTo("kora-1")).toHaveLength(0);
     });
 
@@ -337,7 +429,7 @@ describe("POST /v1/relayer", () => {
       api.providers.answer("kora-1", (request) =>
         methodOf(request) === "signTransaction"
           ? { status: 500, body: "oops" }
-          : kora(FEE_PAYER_1)(request),
+          : kora(first.relayer)(request),
       );
       const response = await relayer(
         "signTransaction",
@@ -351,7 +443,7 @@ describe("POST /v1/relayer", () => {
     it("rations signatures per session: the eleventh in a minute is refused, reads still pass", async () => {
       const fresh = await startApiWithRelayer();
       try {
-        fresh.providers.answer("kora-1", kora(FEE_PAYER_1));
+        fresh.providers.answer("kora-1", kora(first.relayer));
         const token = await fresh.token();
         const statuses: number[] = [];
         for (let i = 0; i < 12; i += 1) {
@@ -374,7 +466,7 @@ describe("POST /v1/relayer", () => {
     it("rations signatures in total: once the minute's budget is spent, nobody gets one", async () => {
       const fresh = await startApiWithRelayer();
       try {
-        fresh.providers.answer("kora-1", kora(FEE_PAYER_1));
+        fresh.providers.answer("kora-1", kora(first.relayer));
         const sign = async () => {
           const transaction = signedByPortfolio(genuine.sendUsdc());
           const response = await fresh.call("/v1/relayer", {
@@ -423,8 +515,8 @@ describe("with no relayer configured", () => {
       const response = await bare.call("/v1/relayer", { body: { method: "getPayerSigner" } });
       expect(response.status).toBe(503);
       expect(response.json).toEqual({
-        code: "unavailable",
-        error: "The service this request needs is not available. Nothing was done.",
+        code: "relayer_unavailable",
+        error: "The relayer could not be used. Nothing was signed.",
       });
     } finally {
       await bare.close();

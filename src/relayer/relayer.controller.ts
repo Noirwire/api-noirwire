@@ -72,7 +72,7 @@ export class RelayerController {
       "| --- | --- | --- |",
       "| `getPayerSigner` | optional `not`: fee payers just seen to fail | The fee payer of a replica that answered, and the payment wallet |",
       "| `estimateTransactionFee` | `transaction`, `signer_key`, `fee_token` (USDC) | What this transaction must pay, in raw USDC units |",
-      "| `signTransaction` | `transaction`, `signer_key` | The same transaction with the fee payer's signature added |",
+      "| `signTransaction` | `transaction`, `signer_key` | `{ transaction, signature }`: the same transaction with the fee payer's signature added, and its id |",
       "",
       "**This is not a signing service, and the session does not make it one.** A session token proves nothing about who holds it, so every check below is made on the transaction itself, for a price and for a signature alike, before the relayer hears of it:",
       "",
@@ -89,7 +89,9 @@ export class RelayerController {
       "",
       "**Before a signature**, on top of all of the above: the payment must cover this server's price (to within 2% for a price that moved since the review), the transaction must already carry the portfolio's own valid signature, and the relayer is asked what it would charge first. Signatures are rationed: 10 a minute per session, 30 a minute per address, and 60 a minute and 600 an hour in total, whoever asks. A transaction that was refused is not counted against the total.",
       "",
-      "**Replicas.** Each relayer replica signs as its own key. `getPayerSigner` asks them in random order and returns the first that answers as the key pinned for it; one that does not answer is passed over, which costs nothing because nothing is signed yet. A built transaction names its fee payer, so only that replica is ever asked to price or sign it. A `503` means the replica never received the request, so the wallet may build again for another; a `502` means what the replica did is not known, and the wallet must let the chain settle before trying again.",
+      "**Signing never broadcasts.** The relayer is asked to sign only. The answer is `{ transaction, signature }`: the fully signed transaction in base64, and its id in base58 (the fee payer's signature, which exists only once the relayer has signed). Before it is returned, it is checked to be the transaction that was sent in: the same message byte for byte, the portfolio's signature untouched, and a valid signature of the pinned fee payer. The wallet records the `signature` durably and then sends the transaction itself with `POST /v1/rpc` `sendTransaction`. This order is the point: if this server sent it, a wallet that died right after would hold no id to look for, could conclude the action never went through, and the user would pay twice. A transaction that is signed and never sent costs the relayer nothing, but it still counts against the signature budgets, which are taken at signing.",
+      "",
+      "**Replicas and failover.** Each relayer replica signs as its own key. `getPayerSigner` asks them in random order and returns the first that answers as the key pinned for it; one that is unreachable, errors, or refuses this server's credentials is passed over for the next, which costs nothing because nothing is signed yet. Only when every replica has failed is the answer `503 relayer_unavailable`. A built transaction names its fee payer, so only that replica can price or sign it: if it is unreachable or turns the request away before signing (including for this server's credentials, which is never reported as a `401`), the answer is the same `503 relayer_unavailable`, nothing was signed, and the wallet builds again for another replica. Once a replica has answered the signing call there is no failover: an answer this server cannot use is a `502 no_answer`, what the replica did is not known, and the wallet must let the chain settle that transaction before trying again.",
       "",
       "**Contains wallet addresses: yes.** The transaction names the portfolio, its counterparty and the amount. **Received by:** the relayer (a NoirWire service) and, through it, its RPC provider, from this server's address and never the caller's. One relayed transaction names one portfolio and never the funding wallet.",
       "",
@@ -170,9 +172,11 @@ export class RelayerController {
       },
     },
     sign: {
-      summary: "signTransaction",
+      summary: "signTransaction: signed, not broadcast. Record `signature`, then send it yourself",
       value: {
-        result: { signed_transaction: EXAMPLE.transaction, signer_pubkey: EXAMPLE.address },
+        transaction: EXAMPLE.transaction,
+        signature:
+          "ExampLeSignature1111111111111111111111111111111111111111111111111111111111111111111111",
       },
     },
   })
@@ -190,19 +194,20 @@ export class RelayerController {
   )
   @errorResponse(
     502,
-    "The relayer was reached and gave no answer this server can use. `no_answer`: it answered with an error status, with something unreadable, or with keys this server does not pin, so what it did with the request is not known; for a signature, treat the transaction as possibly signed. `upstream_refused`: it turned down this server's own credentials (it answered 401 or 403); that is an operator's to fix, is logged as such, and is never passed on as a 401.",
-    {
-      no_answer: "No usable answer: what the relayer did is not known",
-      upstream_refused: "The relayer refused this server's credentials",
-    },
+    "The relayer answered the call and this server cannot use the answer: an error status, something unreadable, keys this server does not pin, or a signed transaction that is not the one sent in with a valid fee payer signature. What it did with the request is not known. For a signature, treat the transaction as possibly signed, and do not build it again until the chain has settled it.",
+    { no_answer: "No usable answer: what the relayer did is not known" },
   )
   @SessionRequired({
     403: {
       method_not_allowed:
         "Not one of the three methods. Everything else the relayer can do, sending a transaction above all, is unreachable through this API",
     },
+    503: {
+      relayer_unavailable:
+        "No relayer, every replica failed, no price to charge by, or this transaction's replica is unreachable or turned the request away before signing",
+    },
     describe503:
-      "There is no relayer, no replica could be used, no SOL price or rent could be read to charge by, or the replica never received the request. Nothing was signed. (Also: the token keys could not be read.)",
+      "`relayer_unavailable`: nothing was signed, so the action may be built again, for another replica if there is one. A replica that refuses this server's own credentials lands here too (and is logged as an operator error): never as a `401`. `unavailable`: the token keys could not be read.",
   })
   @BodyLimits(RELAYER_MAX_BODY_BYTES)
   async call(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {

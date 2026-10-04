@@ -6,8 +6,9 @@ import {
   TOKEN_2022_PROGRAM_ID,
   TOKEN_PROGRAM_ID,
 } from "@solana/spl-token";
-import { Keypair, type PublicKey, type VersionedTransaction } from "@solana/web3.js";
+import { Keypair, VersionedTransaction, type PublicKey } from "@solana/web3.js";
 import { beforeEach, describe, expect, it } from "vitest";
+import { base58 as bs58 } from "../../src/chain/core/bytes.js";
 import type { ChainReader } from "../../src/chain/core/chainReader.js";
 import type { LogLine } from "../../src/common/core/log.js";
 import { createMemoryQuotaStore, type Caller } from "../../src/common/core/quota.js";
@@ -28,6 +29,7 @@ import {
 } from "../../src/relayer/core/solPrice.js";
 import {
   ataFor,
+  coSigned,
   mintAccount,
   OPENING_FEE,
   PLAIN_FEE,
@@ -207,7 +209,10 @@ beforeEach(() => {
         ? { signer_address: signer, payment_address: paymentWallet.toBase58() }
         : method === "estimateTransactionFee"
           ? koraEstimate(11_000)
-          : { signed_transaction: params.transaction, signer_pubkey: signer };
+          : {
+              signed_transaction: coSigned(params.transaction as string, relayer),
+              signer_pubkey: signer,
+            };
     return json({ jsonrpc: "2.0", result, id: 1 });
   };
   subject = make();
@@ -232,7 +237,7 @@ describe("the relayer route", () => {
     expect(JSON.parse(subject.pins().body!)).toEqual({ available: false });
     const answer = await call("getPayerSigner");
     expect(answer.status).toBe(503);
-    expect(answer.json).toEqual({ code: "unavailable" });
+    expect(answer.json).toEqual({ code: "relayer_unavailable" });
     expect(upstream).toHaveLength(0);
   });
 
@@ -446,7 +451,7 @@ describe("the relayer route", () => {
     solPrice = null;
     const none = await call("estimateTransactionFee", estimateParams(genuine.sendUsdc()));
     expect(none.status).toBe(503);
-    expect(none.json).toEqual({ code: "unavailable" });
+    expect(none.json).toEqual({ code: "relayer_unavailable" });
     expect(koraCallsOf("estimateTransactionFee")).toHaveLength(1);
   });
 
@@ -636,16 +641,14 @@ describe("the relayer route", () => {
     }
   });
 
-  it("never answers 401 because the relayer refused this server's own credentials", async () => {
+  it("answers 503, never 401, when the replica refuses this server's own credentials", async () => {
     const honest = koraAnswer;
     for (const status of [401, 403]) {
       for (const method of ["estimateTransactionFee", "signTransaction"]) {
         logged = [];
         subject = make();
         // The question asked before signing still passes; the call itself is turned away.
-        let asked = 0;
         koraAnswer = (called, params, url) => {
-          asked += 1;
           const refuse = method === "estimateTransactionFee" ? true : called === "signTransaction";
           return refuse ? new Response(null, { status }) : honest(called, params, url);
         };
@@ -653,8 +656,8 @@ describe("the relayer route", () => {
           method === "signTransaction"
             ? await call(method, signParams(signedByPortfolio(genuine.sendUsdc())))
             : await call(method, estimateParams(genuine.sendUsdc()));
-        expect(answer).toEqual({ status: 502, json: { code: "upstream_refused" } });
-        expect(asked).toBeGreaterThan(0);
+        // Nothing was signed, so the wallet may build again for another replica.
+        expect(answer).toEqual({ status: 503, json: { code: "relayer_unavailable" } });
         expect(logged).toContainEqual({
           event: "operator_error",
           route: "relayer",
@@ -662,6 +665,68 @@ describe("the relayer route", () => {
           reason: "upstream_refused_credentials",
         });
       }
+    }
+  });
+
+  it("hands a signed transaction back with its id, and never broadcasts it", async () => {
+    const transaction = signedByPortfolio(genuine.sendUsdc());
+    const answer = await call("signTransaction", signParams(transaction));
+    expect(answer.status).toBe(200);
+    expect(Object.keys(answer.json).sort()).toEqual(["signature", "transaction"]);
+
+    const signed = VersionedTransaction.deserialize(Buffer.from(answer.json.transaction, "base64"));
+    expect(Buffer.from(signed.message.serialize())).toEqual(
+      Buffer.from(transaction.message.serialize()),
+    );
+    expect(Buffer.from(signed.signatures[1])).toEqual(Buffer.from(transaction.signatures[1]));
+    // The id is the fee payer's signature, in base58, as the chain names the transaction.
+    expect(answer.json.signature).toBe(bs58(signed.signatures[0]));
+    expect(answer.json.signature).toMatch(/^[1-9A-HJ-NP-Za-km-z]{86,88}$/);
+    // Sign only: nothing but the question and the signature was asked of the relayer.
+    expect(upstream.map((sent) => JSON.parse(sent.body!).method)).toEqual([
+      "estimateTransactionFee",
+      "signTransaction",
+    ]);
+  });
+
+  it("returns nothing the relayer changed: another message, a lost signature, or no valid fee payer signature", async () => {
+    const honest = koraAnswer;
+    const pinned = relayer.publicKey.toBase58();
+    const returning = (signedTransaction: (sent: string) => string) => {
+      koraAnswer = (method, params, url) =>
+        method === "signTransaction"
+          ? json({
+              result: {
+                signed_transaction: signedTransaction(params.transaction as string),
+                signer_pubkey: pinned,
+              },
+            })
+          : honest(method, params, url);
+      return call("signTransaction", signParams(signedByPortfolio(genuine.sendUsdc())));
+    };
+    const cases: Record<string, (sent: string) => string> = {
+      "not signed by the fee payer at all": (sent) => sent,
+      "signed by another key": (sent) => {
+        const transaction = VersionedTransaction.deserialize(Buffer.from(sent, "base64"));
+        transaction.signatures[0] = Keypair.generate().secretKey.subarray(0, 64);
+        return encode(transaction);
+      },
+      "another transaction, validly signed": () =>
+        coSigned(
+          encode(signedByPortfolio(compile([sendUsdc(9_000_000n), payment(PLAIN_FEE)]))),
+          relayer,
+        ),
+      "the portfolio's signature replaced": (sent) => {
+        const transaction = VersionedTransaction.deserialize(
+          Buffer.from(coSigned(sent, relayer), "base64"),
+        );
+        transaction.signatures[1] = new Uint8Array(64);
+        return encode(transaction);
+      },
+    };
+    for (const [name, change] of Object.entries(cases)) {
+      const answer = await returning(change);
+      expect(answer, name).toEqual({ status: 502, json: { code: "no_answer" } });
     }
   });
 
@@ -781,7 +846,10 @@ describe("the relayer route", () => {
             ? { signer_address: signer, payment_address: paymentWallet.toBase58() }
             : method === "estimateTransactionFee"
               ? koraEstimate(11_000, signer)
-              : { signed_transaction: params.transaction, signer_pubkey: signer };
+              : {
+                  signed_transaction: coSigned(params.transaction as string, keyOf[url]),
+                  signer_pubkey: signer,
+                };
         return json({ result });
       };
     });

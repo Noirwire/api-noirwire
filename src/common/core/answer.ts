@@ -58,6 +58,7 @@ export const ERRORS = {
   upstream_refused: [502, "The provider refused this server's own credentials."],
   no_answer: [502, "The relayer gave no usable answer. What it did with the request is not known."],
   unavailable: [503, "The service this request needs is not available. Nothing was done."],
+  relayer_unavailable: [503, "The relayer could not be used. Nothing was signed."],
   upstream_not_reached: [503, "The provider could not be reached. It never received the request."],
   upstream_timeout: [504, "The provider did not answer in time."],
   response_timeout: [504, "The request took too long to answer."],

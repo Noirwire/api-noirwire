@@ -59,7 +59,9 @@ The relayer (a Kora server) signs a transaction as its fee payer and is paid bac
 
 Before a signature, the payment must cover that price (to within 2%, for a price that moved since the review), the transaction must already carry the portfolio's own valid signature, and the signature budgets must allow it: 10 a minute per session, 30 per address, and 60 a minute and 600 an hour in total. A refused transaction is not counted against the total.
 
-The relayer runs as one or more replicas, each with a fee payer key of its own, all pinned in this server's configuration and never learned from the relayer. A replica that does not answer is passed over for the next, freely, while nothing is signed. A transaction names its fee payer, so once the portfolio has signed one only that replica is asked. The answers tell the wallet what it may do next: `503` means the replica never received the request, so the wallet may build again for another; `502` means what the replica did is not known, so the wallet waits for the chain to settle that transaction first.
+The relayer runs as one or more replicas, each with a fee payer key of its own, all pinned in this server's configuration and never learned from the relayer. A replica that does not answer is passed over for the next, freely, while nothing is signed. A transaction names its fee payer, so once the portfolio has signed one only that replica is asked. The answers tell the wallet what it may do next: `503 relayer_unavailable` means nothing was signed (the replica was unreachable, or turned the request away), so the wallet may build again for another; `502 no_answer` means what the replica did is not known, so the wallet waits for the chain to settle that transaction first.
+
+Signing never broadcasts. The wallet gets the signed transaction and its id, records the id, and sends the transaction itself through `/v1/rpc`, so an action can never be in flight without the wallet knowing what to look for. The reason is in [architecture.md](architecture.md).
 
 ## The service itself
 
