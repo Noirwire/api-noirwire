@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment: only the example is committed
+.env
+.env.*
+!.env.example
+
+# Supabase CLI working files
+supabase/.temp/
+supabase/.branches/
+
+# Tests
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Local tooling
+.vercel/
+.railway/.cache/
+.idea/
+.vscode/
+.DS_Store

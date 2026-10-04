@@ -1,0 +1,58 @@
+{
+  "name": "api-noirwire",
+  "version": "0.1.0",
+  "description": "The NoirWire API: the relay between the wallets and the services they have to ask.",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "nest start --watch --env-file .env",
+    "build": "nest build",
+    "start": "node dist/main.js",
+    "start:local": "node --env-file=.env dist/main.js",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:live": "vitest run --config vitest.live.config.ts",
+    "openapi": "nest build && node scripts/export-openapi.mjs",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "e2e:local": "node --env-file=.env scripts/e2e-local.mjs"
+  },
+  "dependencies": {
+    "@nestjs/common": "12.1.2",
+    "@nestjs/core": "12.1.2",
+    "@nestjs/platform-express": "12.1.2",
+    "@nestjs/swagger": "12.0.2",
+    "@solana/spl-token": "0.4.15",
+    "@solana/web3.js": "1.99.0",
+    "jose": "6.2.12",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@nestjs/cli": "^12.0.8",
+    "@nestjs/testing": "^12.1.2",
+    "@swc/core": "^1.16.13",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.19.1",
+    "@types/supertest": "^7.2.1",
+    "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.9.9",
+    "supabase": "^2.119.0",
+    "supertest": "^7.3.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.0",
+    "unplugin-swc": "^2.0.0",
+    "vitest": "^5.0.3"
+  }
+}
