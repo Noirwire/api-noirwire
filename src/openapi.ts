@@ -85,6 +85,8 @@ const DESCRIPTION = [
   "",
   "The client address is the one the hosting platform reports, never one a caller wrote: `X-Forwarded-For` is not read. One operator mechanism exists beside it and is not for third parties: the web app's own server, which forwards its pages' requests, proves itself with a shared secret in `X-NoirWire-Edge` and reports the browser's address in `X-NoirWire-Client-IP`. Without the matching secret both headers are ignored.",
   "",
+  "A browser calling this API directly (not through the web app's own server) is also bound by CORS: only the origins in `ALLOWED_ORIGINS` are served, a request naming any other origin is refused outright, and a preflight is answered for exactly `Authorization`, `Content-Type` and `solana-client` (the header `@solana/web3.js` adds on its own, including on `/v1/rpc`). Credentials are never allowed, since the token travels in a header and no cookie is used.",
+  "",
   "Every answer is JSON (or empty), with a fixed JSON content type, and is never cacheable (`Cache-Control: no-store`).",
   "",
   "## Errors",

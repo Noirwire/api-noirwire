@@ -109,6 +109,17 @@ export type RouteLimits = {
   total: number;
 };
 
+/**
+ * `RouteLimits` worked out from what a provider allows this server's key, a
+ * second: the route's total for a minute is what the provider gate lets
+ * through in one, a session at most `1 / sessionDivisor` of that, and an
+ * address at most all of it.
+ */
+export function limitsFromProviderRps(providerRps: number, sessionDivisor = 2): RouteLimits {
+  const total = providerRps * 60;
+  return { perSession: Math.ceil(total / sessionDivisor), perIp: total, total };
+}
+
 /** The three budgets one request to `route` is counted against. */
 export function routeBudgets(route: string, caller: Caller, limits: RouteLimits): Budget[] {
   return [

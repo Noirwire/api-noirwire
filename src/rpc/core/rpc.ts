@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { refusal, type Answer } from "../../common/core/answer.js";
-import type { RouteLimits } from "../../common/core/quota.js";
+import { limitsFromProviderRps, type RouteLimits } from "../../common/core/quota.js";
 
 /**
  * The wallet's only way to the Solana RPC. It forwards what it receives, one
@@ -60,8 +60,7 @@ export const RPC_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
  * import a burst of about a hundred.
  */
 export function rpcLimits(providerRps: number): RouteLimits {
-  const total = providerRps * 60;
-  return { perSession: Math.ceil(total / 2), perIp: total, total };
+  return limitsFromProviderRps(providerRps);
 }
 
 /** The share of the provider's allowance the costly calls may take: half. */
@@ -69,8 +68,7 @@ export const heavyRps = (providerRps: number) => Math.max(1, Math.floor(provider
 
 /** The same rule for the costly calls, over their smaller allowance. A trade needs about four of them. */
 export function rpcHeavyLimits(providerRps: number): RouteLimits {
-  const total = heavyRps(providerRps) * 60;
-  return { perSession: Math.ceil(total / 4), perIp: total, total };
+  return limitsFromProviderRps(heavyRps(providerRps), 4);
 }
 
 /**

@@ -229,7 +229,9 @@ describe("cross-origin access", () => {
       headers: {
         origin,
         "access-control-request-method": "POST",
-        "access-control-request-headers": "authorization, content-type",
+        // What @solana/web3.js asks for on a browser call to /v1/rpc: it adds
+        // `solana-client` to every request, including this server's own.
+        "access-control-request-headers": "authorization, content-type, solana-client",
       },
     });
 
@@ -239,12 +241,30 @@ describe("cross-origin access", () => {
     expect(response.headers.get("access-control-allow-origin")).toBe(ALLOWED_ORIGIN);
     expect(response.headers.get("access-control-allow-methods")).toBe("GET, POST");
     expect(response.headers.get("access-control-allow-headers")).toBe(
-      "Authorization, Content-Type",
+      "Authorization, Content-Type, solana-client",
     );
     expect(response.headers.get("access-control-max-age")).toBe("600");
     expect(response.headers.get("vary")).toContain("Origin");
     // The token travels in a header, so cookies are never allowed.
     expect(response.headers.get("access-control-allow-credentials")).toBeNull();
+  });
+
+  it("never widens the allowed headers for one a caller asks for", async () => {
+    const response = await preflight(ALLOWED_ORIGIN);
+    const widened = await api.call("/v1/rpc", {
+      method: "OPTIONS",
+      token: null,
+      headers: {
+        origin: ALLOWED_ORIGIN,
+        "access-control-request-method": "POST",
+        "access-control-request-headers": "authorization, content-type, x-unknown-header",
+      },
+    });
+    expect(widened.status).toBe(204);
+    expect(widened.headers.get("access-control-allow-headers")).toBe(
+      response.headers.get("access-control-allow-headers"),
+    );
+    expect(widened.headers.get("access-control-allow-headers")).not.toContain("x-unknown-header");
   });
 
   it("refuses a preflight from a foreign origin, with no CORS header at all", async () => {

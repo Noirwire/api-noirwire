@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { refusal, type Answer } from "../../common/core/answer.js";
-import type { RouteLimits } from "../../common/core/quota.js";
+import { limitsFromProviderRps, type RouteLimits } from "../../common/core/quota.js";
 
 /**
  * The wallet's only way to Jupiter: quotes and orders, landing a signed
@@ -51,8 +51,7 @@ export const JUPITER_MAX_RESPONSE_BYTES = 1024 * 1024;
  * half. A pie reviews and places up to ten orders back to back.
  */
 export function jupiterLimits(providerRps: number): RouteLimits {
-  const total = providerRps * 60;
-  return { perSession: Math.ceil(total / 2), perIp: total, total };
+  return limitsFromProviderRps(providerRps);
 }
 
 /** A flat object of strings: what a body that becomes a query has to be. */

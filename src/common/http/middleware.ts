@@ -87,7 +87,13 @@ export function noQueryString(): Middleware {
 }
 
 const ALLOWED_METHODS = "GET, POST";
-const ALLOWED_HEADERS = "Authorization, Content-Type";
+/**
+ * `solana-client` is added by `@solana/web3.js` on every RPC call, including
+ * from a browser; without it on this list a wallet's web build is refused at
+ * preflight before `/v1/rpc` is ever reached. It is never read or forwarded
+ * upstream: the relay builds the upstream request from scratch.
+ */
+const ALLOWED_HEADERS = "Authorization, Content-Type, solana-client";
 /** How old a cached price is, and when to try again: a browser may not read either unless it is named here. */
 const EXPOSED_HEADERS = "Age, Retry-After";
 const PREFLIGHT_MAX_AGE_SECONDS = "600";

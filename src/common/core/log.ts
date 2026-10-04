@@ -14,5 +14,3 @@ export type LogLine =
   | { event: "lifecycle"; state: "listening" | "stopping" | "config_refused" };
 
 export type Log = (line: LogLine) => void;
-
-export const silentLog: Log = () => undefined;
