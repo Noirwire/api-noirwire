@@ -58,6 +58,50 @@ describe("the configuration", () => {
     });
   });
 
+  describe("on Railway", () => {
+    const { SOLANA_NETWORK: _unset, ...withoutNetwork } = base;
+    const railway = {
+      ...withoutNetwork,
+      RAILWAY_ENVIRONMENT_NAME: "production",
+      PORT: "8080",
+      SOLANA_RPC_URL: "https://rpc.example.com/?api-key=k",
+    };
+
+    it("needs only the secrets and addresses: every tuning value has a default", () => {
+      expect(loadConfig(railway)).toEqual({
+        ...loadConfig(base),
+        port: 8080,
+        network: "mainnet",
+        rpcUrl: "https://rpc.example.com/?api-key=k",
+        trustedProxyHops: 1,
+      });
+    });
+
+    it("still refuses mainnet without a dedicated RPC provider", () => {
+      expect(problems({ ...railway, SOLANA_RPC_URL: undefined })).toMatch(
+        /SOLANA_RPC_URL is required on mainnet/,
+      );
+    });
+
+    it("lets a set value win over its default", () => {
+      const config = loadConfig({
+        ...railway,
+        SOLANA_NETWORK: "devnet",
+        SOLANA_RPC_URL: undefined,
+        TRUSTED_PROXY_HOPS: "0",
+      });
+      expect(config.network).toBe("devnet");
+      expect(config.trustedProxyHops).toBe(0);
+      expect(problems({ ...railway, SOLANA_NETWORK: "testnet" })).toMatch(/SOLANA_NETWORK/);
+    });
+
+    it("is not assumed from a blank environment name", () => {
+      expect(problems({ ...railway, RAILWAY_ENVIRONMENT_NAME: " " })).toMatch(
+        /SOLANA_NETWORK must be/,
+      );
+    });
+  });
+
   it("names every problem at once, and never a value", () => {
     const message = problems({ SUPABASE_JWT_SECRET: "short-secret" });
     expect(message).toMatch(/SOLANA_NETWORK must be/);
@@ -68,7 +112,7 @@ describe("the configuration", () => {
     expect(message).not.toContain("short-secret");
   });
 
-  it("does not guess the network", () => {
+  it("does not guess the network off Railway", () => {
     expect(problems({ ...base, SOLANA_NETWORK: undefined })).toMatch(/SOLANA_NETWORK/);
     expect(problems({ ...base, SOLANA_NETWORK: "mainnet-beta" })).toMatch(/SOLANA_NETWORK/);
     expect(problems({ ...base, SOLANA_NETWORK: "testnet" })).toMatch(/SOLANA_NETWORK/);
@@ -215,13 +259,6 @@ describe("the configuration", () => {
         paymentWallet,
         accountCreation: true,
       });
-    });
-
-    it("takes a single replica as KORA_URL", () => {
-      const { KORA_URLS, ...rest } = kora;
-      expect(loadConfig({ ...base, ...rest, KORA_URL: KORA_URLS }).relayer?.replicas).toHaveLength(
-        1,
-      );
     });
 
     it("refuses half a configuration outright, whichever half is missing", () => {

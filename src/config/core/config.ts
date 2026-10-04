@@ -5,6 +5,11 @@ import { DEVNET_RPC_URL, isAddress, type Network } from "../../chain/core/networ
  * Everything this service is configured with, read once when it starts. A
  * value that is missing or malformed stops the start with every problem
  * named, so a bad deploy fails there and not at the first transaction.
+ *
+ * On Railway, which names its environment in `RAILWAY_ENVIRONMENT_NAME`, the
+ * network defaults to mainnet and the one proxy in front is trusted. Anywhere
+ * else the network has no default, so a laptop never lands on mainnet by
+ * leaving a variable out.
  */
 
 export type RelayerConfig = {
@@ -102,7 +107,11 @@ export function loadConfig(env: Env): Config {
     return result.success ? result.data : refuse(`${name} must be an http(s) URL.`, "");
   };
 
-  const network = z.enum(["mainnet", "devnet"]).safeParse(read("SOLANA_NETWORK"));
+  const onRailway = read("RAILWAY_ENVIRONMENT_NAME") !== "";
+
+  const network = z
+    .enum(["mainnet", "devnet"])
+    .safeParse(read("SOLANA_NETWORK") || (onRailway ? "mainnet" : ""));
   if (!network.success) problems.push('SOLANA_NETWORK must be "mainnet" or "devnet".');
   const networkName: Network = network.success ? network.data : "devnet";
 
@@ -125,7 +134,7 @@ export function loadConfig(env: Env): Config {
     .safeParse(read("PORT") || "4000");
   if (!port.success) problems.push("PORT must be a port number.");
 
-  const hops = z.enum(["0", "1"]).safeParse(read("TRUSTED_PROXY_HOPS") || "0");
+  const hops = z.enum(["0", "1"]).safeParse(read("TRUSTED_PROXY_HOPS") || (onRailway ? "1" : "0"));
   if (!hops.success) {
     problems.push("TRUSTED_PROXY_HOPS must be 0 (no proxy) or 1 (the platform's edge).");
   }
@@ -255,8 +264,7 @@ export function loadConfig(env: Env): Config {
  * `KORA_URLS` lists one or more replicas, and `KORA_FEE_PAYERS` the fee
  * payer key of each, in the same order: a replica is only ever asked to sign
  * as its own key, and when one does not answer the next is tried. They share
- * one API key, one HMAC secret and one payment wallet. A single URL may also
- * be given as `KORA_URL`.
+ * one API key, one HMAC secret and one payment wallet.
  *
  * The fee payer keys and the payment wallet are pinned here on purpose, and
  * not learned from the relayer: whatever key a compromised or misrouted
@@ -273,7 +281,7 @@ function relayerConfig(env: Env, problems: string[]): RelayerConfig | null {
     "KORA_PAYMENT_WALLET",
     "KORA_ACCOUNT_CREATION",
   ];
-  const urls = list(read("KORA_URLS") || read("KORA_URL"));
+  const urls = list(read("KORA_URLS"));
   if (urls.length === 0) {
     if (names.some((name) => read(name))) {
       problems.push("KORA_URLS is unset, so no other KORA_ variable may be set either.");

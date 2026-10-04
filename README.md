@@ -112,9 +112,11 @@ Also run in CI: `npm run lint`, `npm run typecheck`, `npm run format:check`, `np
 
 ## Deployment
 
-The API runs on Railway from the `Dockerfile`, as one service in the Railway project that also holds the relayer, which it reaches over the private network. The settings are code in `.railway/railway.ts`; secrets are set once on Railway and never written to this repository. It runs as **one replica**: its counters live in memory. Every variable and every step is in [docs/deploy.md](docs/deploy.md) and [docs/environment.md](docs/environment.md).
+Railway, one replica: the steps are in [docs/deploy.md](docs/deploy.md).
 
-CI (lint and types, unit, integration, build, Docker build) runs on every push and pull request. With deploys wired to GitHub, Railway's "Wait for CI" holds a deploy until it has passed.
+## Environment
+
+Every variable and its default is in [docs/environment.md](docs/environment.md).
 
 ## Security
 
