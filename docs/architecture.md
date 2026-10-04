@@ -21,7 +21,8 @@ One NestJS service, no database. A wallet calls it; it calls a provider; the ans
 5. **Session.** Every route requires a session token unless it is marked public (`/health`, and the two session routes). The token's signature, issuer, audience, expiry and the session's age are checked.
 6. **Admission.** The route's budgets are taken (session, address, total), then the body is read with a size cap and a five-second deadline. The framework parses no body: each route reads its own.
 7. **The route's own rule.** The allow-list, the validation, and for the relayer the template, the signature and the price.
-8. **The relay.** One upstream request, written from scratch. Coming back: a status and a JSON body under a size cap, or a fixed error.
+8. **The provider's allowance.** On the RPC and Jupiter routes, the request waits its session's turn at the provider gate (`src/common/core/providerGate.ts`), or is refused with `Retry-After`.
+9. **The relay.** One upstream request, written from scratch. Coming back: a status and a JSON body under a size cap, or a fixed error.
 
 ## The folders
 

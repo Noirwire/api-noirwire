@@ -38,16 +38,23 @@ Every `/v1` route but the two session routes requires `Authorization: Bearer <to
 
 ## Limits
 
-Every route counts a request against three budgets, per minute: the session's, the client address's, and a total for the route. The session is the first key because of how the web app reaches this server: its pages call the web app's own origin, and the web app's server forwards the request, so those requests arrive from that server's few addresses. An address is therefore many people, and its allowance is larger than a session's. The totals bound what this server will spend of each provider's quota, whoever asks. Starting a session, the one thing that needs no token, is rationed per address and in total, by the minute and by the hour.
+**Per caller.** Every route counts a request against three budgets, per minute: the session's, the client address's, and a total for the route.
+
+**Per provider.** A provider allows this server's key only so many requests a second, counted together whoever they are for. So the RPC route and the Jupiter routes send each provider fewer than it allows (`RPC_PROVIDER_RPS`, `JUPITER_PROVIDER_RPS`), through a token bucket with a small burst (`src/common/core/providerGate.ts`). Requests wait in a line per session and the lines are served in turn, so a quiet wallet is served however loud another is. A request that would wait more than about 400 ms is answered `429 rate_limited` with `Retry-After`. The costly RPC calls are held to half the rate as well. The per-minute budgets follow from the same numbers: a route's total is what the gate lets through in a minute, a session may take half of it. The server's own reads of a provider (the SOL price, a mint, the price index) wait in the same line.
+
+**Starting a session** is the one thing that needs no token, and each session is a new set of budgets, so it is rationed hardest: 10 an hour per client address and 600 an hour in total, unless configured (`SESSION_STARTS_PER_IP_PER_HOUR`, `SESSION_STARTS_PER_HOUR`). A wallet starts a session only when it has none or its last was retired; otherwise it refreshes.
+
+**The client address** is never one a caller wrote. With no trusted proxy it is the socket's. Behind Railway's edge (`TRUSTED_PROXY_HOPS=1`) it is the `X-Real-IP` header the edge sets; when that header is missing or is not an address, it falls back to the socket's. `X-Forwarded-For` is not read at all. The web app's own server forwards its pages' requests, which would make every web user look like that server; when the operator configures `EDGE_SHARED_SECRET` and a request carries it in `X-NoirWire-Edge` (compared in constant time), the address is the one that server reports in `X-NoirWire-Client-IP`. Without the matching secret that header is ignored.
 
 None of these is a hard limit, and none should be read as one:
 
-- The counters live in the memory of one process (`src/common/core/quota.ts`). The service runs as one replica for that reason; a second would double every number.
-- A session costs nothing to replace, so the per-session limits stop a runaway wallet, not an attacker.
-- The client address is the one the hosting platform reports (`X-Real-IP` behind Railway's edge, with `TRUSTED_PROXY_HOPS=1`). Nothing a caller can write, `X-Forwarded-For` above all, is read.
+- The counters live in the memory of one process (`src/common/core/quota.ts`). The service runs as one replica for that reason; a second would double every number. A restart forgets them, the session budgets included.
+- A session costs little to replace, so the per-session limits and the fair turn at the provider gate keep wallets from crowding each other out. They are not a defence against someone who holds many sessions; rationing session starts is.
 - When a counter table is full of live windows, a newcomer is refused, not waved through.
 
-The hard limits are elsewhere: the provider's own quota for this server's key, and for the relayer the SOL kept in each fee payer wallet, which the operator keeps small.
+The hard limits are elsewhere: the provider gate (this server never asks more of a provider than it is configured to), and for the relayer the SOL kept in each fee payer wallet, which the operator keeps small.
+
+**Not built yet.** Two things would make session starts hold against a determined abuser, and are recorded here as follow-up work: a durable budget (a shared store behind `QuotaStore`, so counts survive a restart and hold across replicas), and an abuse challenge before a session is issued (a proof of work or an attestation). Until then the defaults are deliberately low.
 
 ## The fee relayer
 

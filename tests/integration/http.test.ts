@@ -163,6 +163,16 @@ describe("the session every /v1 route requires", () => {
     expect(api.providers.sentTo("rpc")).toHaveLength(0);
   });
 
+  it("refuses a valid token whose session age cannot be told, on every protected route", async () => {
+    const ageless = await api.token({ startedAt: null });
+    for (const [method, path, body] of SESSION_ROUTES) {
+      const response = await api.call(path, { method, body, token: ageless });
+      expect(response.status, `${method} ${path}`).toBe(401);
+      expect(response.json.code).toBe("session_expired");
+    }
+    expect(api.providers.received).toHaveLength(0);
+  });
+
   it("accepts a token signed with the project's shared secret, when one is configured", async () => {
     const token = await sharedSecretToken(SECRET, { issuer: api.issuer });
     expect((await api.call("/v1/rpc", { body: balance, token })).status).toBe(200);
@@ -241,7 +251,7 @@ describe("cross-origin access", () => {
     const response = await api.call("/v1/prices", { headers: { origin: ALLOWED_ORIGIN } });
     expect(response.status).toBe(200);
     expect(response.headers.get("access-control-allow-origin")).toBe(ALLOWED_ORIGIN);
-    expect(response.headers.get("access-control-expose-headers")).toBe("Age");
+    expect(response.headers.get("access-control-expose-headers")).toBe("Age, Retry-After");
     expect(response.headers.get("vary")).toContain("Origin");
   });
 

@@ -1,29 +1,54 @@
+import { createHash, timingSafeEqual } from "node:crypto";
+
 /**
- * The address a request arrived from, as the hosting platform reports it.
- *
+ * The address a request arrived from, as something this server can trust
+ * reports it. Nothing a caller can write is ever read on its own word:
  * `x-forwarded-for` is a list any client can start with whatever it likes,
- * so nothing a caller can choose is ever read. With no trusted proxy the
- * address is the socket's. With one (Railway's edge), it is the `x-real-ip`
- * header that edge sets, or failing that the last `x-forwarded-for` entry,
- * the hop that reached this server. A request that should have come through
- * the proxy and names neither is counted under one shared key.
+ * and is not read at all.
  *
- * A request the web app's host forwards carries that host's address, not
- * the browser's. That is expected: limits are keyed on the session first.
+ * - With no trusted proxy, the address is the socket's.
+ * - With one (Railway's edge), it is the `x-real-ip` header, which Railway
+ *   documents as the one "for identifying client's remote IP" and sets
+ *   itself on every request it passes on. When that header is missing or is
+ *   not an address, the request did not come the way it should have, and the
+ *   address falls back to the socket's, never to another header.
+ * - The web app's own server forwards its pages' requests, so those arrive
+ *   from that server's address. When the operator has configured a shared
+ *   secret and the request carries it in `x-noirwire-edge`, the address is
+ *   the one that server reports in `x-noirwire-client-ip`. Without the
+ *   matching secret that header is ignored like any other a caller wrote.
  */
 export type ClientIpSource = {
   trustedProxyHops: 0 | 1;
+  /** The secret the web app's edge code proves itself with, or null when there is none. */
+  edgeSecret: string | null;
   socketAddress: string | undefined;
   header(name: string): string | undefined;
 };
 
 export const UNKNOWN_CLIENT = "unknown";
+export const EDGE_SECRET_HEADER = "x-noirwire-edge";
+export const EDGE_CLIENT_IP_HEADER = "x-noirwire-client-ip";
+
+const digest = (value: string) => createHash("sha256").update(value).digest();
+
+/** Whether `given` is `secret`, compared in the same time whatever was sent. */
+function sameSecret(given: string | undefined, secret: string): boolean {
+  return given !== undefined && timingSafeEqual(digest(given), digest(secret));
+}
 
 export function clientIp(source: ClientIpSource): string {
-  if (source.trustedProxyHops === 0) return rateKeyOf(source.socketAddress);
-  const real = source.header("x-real-ip")?.split(",")[0]?.trim();
-  const lastHop = source.header("x-forwarded-for")?.split(",").at(-1)?.trim();
-  return rateKeyOf(real || lastHop);
+  if (
+    source.edgeSecret !== null &&
+    sameSecret(source.header(EDGE_SECRET_HEADER), source.edgeSecret)
+  ) {
+    const reported = rateKeyOf(source.header(EDGE_CLIENT_IP_HEADER));
+    if (reported !== UNKNOWN_CLIENT) return reported;
+  }
+  const socket = rateKeyOf(source.socketAddress);
+  if (source.trustedProxyHops === 0) return socket;
+  const real = rateKeyOf(source.header("x-real-ip"));
+  return real === UNKNOWN_CLIENT ? socket : real;
 }
 
 const IPV4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;

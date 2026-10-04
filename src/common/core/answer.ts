@@ -81,6 +81,10 @@ export function codeOf(from: Answer): string | null {
 
 export const rateRefusal = (): Answer => refusal("rate_limited");
 
+/** The same refusal, saying when to try again: this server is holding back for a provider. */
+export const busyRefusal = (retryAfterSeconds: number): Answer =>
+  refusal("rate_limited", { "Retry-After": String(retryAfterSeconds) });
+
 /** The parsed body of an answer, or null when it has none or it is not JSON. */
 export function parsed(from: Answer): unknown {
   if (from.body === null) return null;

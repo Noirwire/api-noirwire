@@ -8,7 +8,7 @@ import { createMemoryQuotaStore, type QuotaStore } from "../../src/common/core/q
 import { ApiRefusal } from "../../src/common/http/refusal.js";
 import type { Config } from "../../src/config/core/config.js";
 
-const config = { trustedProxyHops: 0 } as Config;
+const config = { trustedProxyHops: 0, edgeSecret: null } as Config;
 
 type FakeRequest = {
   headers: Record<string, string>;
@@ -19,7 +19,7 @@ type FakeRequest = {
 function guardWith(options: { isPublic?: boolean; verify?: Verifier; quotas?: QuotaStore }) {
   const reflector = { getAllAndOverride: () => options.isPublic ?? false } as unknown as Reflector;
   const verify: Verifier =
-    options.verify ?? (async () => ({ sessionId: "session-1", startedAt: null }));
+    options.verify ?? (async () => ({ sessionId: "session-1", startedAt: 0 }));
   return new SessionGuard(reflector, config, options.quotas ?? createMemoryQuotaStore(), verify);
 }
 
@@ -56,7 +56,7 @@ describe("the session guard", () => {
   it("lets a request with a valid token through and attaches its session", async () => {
     const req = request("Bearer aaa.bbb.ccc");
     expect(await guardWith({}).canActivate(contextOf(req))).toBe(true);
-    expect(req.session).toEqual({ sessionId: "session-1", startedAt: null });
+    expect(req.session).toEqual({ sessionId: "session-1", startedAt: 0 });
   });
 
   it("refuses a request with no token, without asking the verifier", async () => {
@@ -64,7 +64,7 @@ describe("the session guard", () => {
     const guard = guardWith({
       verify: async () => {
         asked += 1;
-        return { sessionId: "s", startedAt: null };
+        return { sessionId: "s", startedAt: 0 };
       },
     });
     for (const header of [undefined, "", "Basic abc", "Bearer", "Bearer not-a-jwt"]) {

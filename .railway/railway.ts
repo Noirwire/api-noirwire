@@ -37,6 +37,13 @@ export default defineRailway(() => {
       // Railway's edge is the one proxy in front of this service. With this set, the
       // client address is read from the X-Real-IP header the edge adds.
       TRUSTED_PROXY_HOPS: "1",
+      // What this service may ask of each provider a second. Keep each BELOW what the
+      // provider allows the key: the provider counts every wallet's requests together.
+      RPC_PROVIDER_RPS: "8",
+      JUPITER_PROVIDER_RPS: "5",
+      // Sessions that may be started in an hour: per client address, and in total.
+      SESSION_STARTS_PER_IP_PER_HOUR: "10",
+      SESSION_STARTS_PER_HOUR: "600",
       SESSION_MAX_AGE_HOURS: "24",
       // The relayer is reached over Railway's private network, by its service name. It
       // has no public domain: this service is the only thing that can call it.
@@ -52,6 +59,8 @@ export default defineRailway(() => {
       SUPABASE_URL: preserve(),
       SUPABASE_PUBLISHABLE_KEY: preserve(),
       ALLOWED_ORIGINS: preserve(),
+      // Shared with the web app's server only, so web users are counted by their own address.
+      EDGE_SHARED_SECRET: preserve(),
       UMAMI_URL: preserve(),
       UMAMI_WEBSITE_ID: preserve(),
       UMAMI_HOSTNAME: preserve(),

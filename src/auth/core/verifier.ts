@@ -35,8 +35,8 @@ export type VerifierConfig = {
 export type Session = {
   /** The key this caller's limits are counted under. Never stored, never logged. */
   sessionId: string;
-  /** When the session began, in milliseconds, when the token says. */
-  startedAt: number | null;
+  /** When the session began, in milliseconds. */
+  startedAt: number;
 };
 
 export type AuthFailure =
@@ -74,14 +74,19 @@ const isId = (value: unknown): value is string =>
 
 /**
  * When the session began: the earliest moment its authentication methods
- * record. It stays the same however often the session is refreshed.
+ * record (`amr`, which Supabase writes into every access token, with the
+ * time of the anonymous sign-in). It stays the same however often the
+ * session is refreshed, which `iat` does not: that is renewed with each
+ * token, so it says nothing of the session's age and is not used.
  */
 export function sessionStartedAt(claims: JWTPayload): number | null {
   const { amr } = claims;
   if (!Array.isArray(amr)) return null;
   const times = amr
     .map((entry) => (entry as { timestamp?: unknown } | null)?.timestamp)
-    .filter((time): time is number => typeof time === "number" && Number.isFinite(time));
+    .filter(
+      (time): time is number => typeof time === "number" && Number.isFinite(time) && time > 0,
+    );
   return times.length > 0 ? Math.min(...times) * 1000 : null;
 }
 
@@ -144,8 +149,9 @@ export function createVerifier(config: VerifierConfig): Verifier {
     }
     const sessionId = isId(claims.session_id) ? claims.session_id : claims.sub;
     if (!isId(sessionId)) throw new AuthError("unauthorized");
+    // A session whose age cannot be told is treated as too old, not as new.
     const startedAt = sessionStartedAt(claims);
-    if (startedAt !== null && now - startedAt > config.sessionMaxAgeMs) {
+    if (startedAt === null || now - startedAt > config.sessionMaxAgeMs) {
       throw new AuthError("session_expired");
     }
     return { sessionId, startedAt };

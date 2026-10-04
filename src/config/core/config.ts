@@ -48,6 +48,12 @@ export type Config = {
   };
   allowedOrigins: string[];
   trustedProxyHops: 0 | 1;
+  /** Proves a request was forwarded by the web app's own server, which may then report the browser's address. */
+  edgeSecret: string | null;
+  /** What this server may ask of each provider, a second: below what the provider allows its key. */
+  rpcProviderRps: number;
+  jupiterProviderRps: number;
+  sessionStarts: { perIpPerHour: number; perHour: number };
   analytics: AnalyticsConfig | null;
 };
 
@@ -123,6 +129,29 @@ export function loadConfig(env: Env): Config {
   if (!hops.success) {
     problems.push("TRUSTED_PROXY_HOPS must be 0 (no proxy) or 1 (the platform's edge).");
   }
+
+  const edgeSecret = read("EDGE_SHARED_SECRET") || null;
+  if (edgeSecret !== null && edgeSecret.length < 32) {
+    problems.push("EDGE_SHARED_SECRET must be at least 32 characters when set.");
+  }
+
+  const count = (name: string, fallback: number, max: number): number => {
+    const parsed = z.coerce
+      .number()
+      .int()
+      .min(1)
+      .max(max)
+      .safeParse(read(name) || String(fallback));
+    return parsed.success
+      ? parsed.data
+      : refuse(`${name} must be a whole number from 1 to ${max}.`, fallback);
+  };
+  const rpcProviderRps = count("RPC_PROVIDER_RPS", 8, 10_000);
+  const jupiterProviderRps = count("JUPITER_PROVIDER_RPS", 5, 10_000);
+  const sessionStarts = {
+    perIpPerHour: count("SESSION_STARTS_PER_IP_PER_HOUR", 10, 100_000),
+    perHour: count("SESSION_STARTS_PER_HOUR", 600, 1_000_000),
+  };
 
   const allowedOrigins = list(env.ALLOWED_ORIGINS);
   if (allowedOrigins.length === 0) {
@@ -208,6 +237,10 @@ export function loadConfig(env: Env): Config {
     },
     allowedOrigins,
     trustedProxyHops: hops.success && hops.data === "1" ? 1 : 0,
+    edgeSecret,
+    rpcProviderRps,
+    jupiterProviderRps,
+    sessionStarts,
     analytics,
   };
   if (problems.length > 0) throw new ConfigError(problems);

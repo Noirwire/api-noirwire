@@ -12,7 +12,7 @@ type Sent = { url: string; method?: string; headers: Record<string, string>; bod
 let sent: Sent[];
 let logged: LogLine[];
 let reply: (url: string) => Response | Promise<Response>;
-let startedAt: number | null;
+let startedAt: number;
 let verifyFailure: AuthError | null;
 
 const issuedBy = (over: Record<string, unknown> = {}) => ({
@@ -27,13 +27,13 @@ const issuedBy = (over: Record<string, unknown> = {}) => ({
 
 const verify: Verifier = async (_token, now = Date.now()) => {
   if (verifyFailure) throw verifyFailure;
-  if (startedAt !== null && now - startedAt > DAY_MS) throw new AuthError("session_expired");
+  if (now - startedAt > DAY_MS) throw new AuthError("session_expired");
   return { sessionId: "session-id", startedAt };
 };
 
 const sessions = () =>
   createSessions(
-    { supabaseUrl: SUPABASE, publishableKey: "sb_publishable_key", sessionMaxAgeMs: DAY_MS },
+    { supabaseUrl: SUPABASE, publishableKey: "sb_publishable_key" },
     {
       fetch: (async (url: string, init: RequestInit) => {
         sent.push({
@@ -193,27 +193,17 @@ describe("refreshing a session", () => {
     expect((await refresh({ refreshToken: "old" })).status).toBe(200);
   });
 
-  it("reads the session's age from the provider's answer when the token records none", async () => {
-    startedAt = null;
-    reply = () =>
-      Response.json(
-        issuedBy({ user: { created_at: new Date(NOW - DAY_MS - 60_000).toISOString() } }),
-      );
+  it("hands out no session the verifier calls expired, whatever the provider says of its age", async () => {
+    verifyFailure = new AuthError("session_expired");
+    reply = () => Response.json(issuedBy({ user: { created_at: new Date(NOW).toISOString() } }));
     expect(await refresh({ refreshToken: "old" })).toEqual({
       status: 401,
       json: { code: "session_expired" },
     });
-    reply = () =>
-      Response.json(issuedBy({ user: { created_at: new Date(NOW - 3_600_000).toISOString() } }));
-    expect((await refresh({ refreshToken: "old" })).status).toBe(200);
-  });
-
-  it("treats a session whose age cannot be told as too old, not as new", async () => {
-    startedAt = null;
-    reply = () => Response.json(issuedBy({ user: undefined }));
-    expect((await refresh({ refreshToken: "old" })).json).toEqual({ code: "session_expired" });
-    reply = () => Response.json(issuedBy({ user: { created_at: "not a date" } }));
-    expect((await refresh({ refreshToken: "old" })).json).toEqual({ code: "session_expired" });
+    expect(read(await sessions().start(NOW))).toEqual({
+      status: 401,
+      json: { code: "session_expired" },
+    });
   });
 
   it("answers 401 session_invalid to a refresh token the provider turns down", async () => {

@@ -28,7 +28,7 @@ export type CallOptions = {
   body?: unknown;
   /** A token, or null to send none. Omitted, a fresh session's token is sent. */
   token?: string | null;
-  ip?: string;
+  ip?: string | null;
   headers?: Record<string, string>;
 };
 
@@ -45,7 +45,8 @@ let addresses = 0;
 /**
  * The real application over real HTTP, with every provider pointed at the
  * local stand-in. It trusts one proxy hop, as on the hosting platform, so a
- * test names the client address with `x-real-ip`.
+ * test names the client address with `x-real-ip` (pass `ip: null` to send
+ * none).
  */
 export async function startApi(env: Record<string, string> = {}): Promise<Api> {
   const providers = await startProviders();
@@ -66,6 +67,10 @@ export async function startApi(env: Record<string, string> = {}): Promise<Api> {
     SUPABASE_PUBLISHABLE_KEY: "sb_publishable_integration",
     ALLOWED_ORIGINS: ALLOWED_ORIGIN,
     TRUSTED_PROXY_HOPS: "1",
+    // Far above what any test sends, so only the tests that set a provider
+    // rate of their own ever wait at the provider gate.
+    RPC_PROVIDER_RPS: "1000",
+    JUPITER_PROVIDER_RPS: "1000",
     UMAMI_URL: providers.urlOf("umami"),
     UMAMI_WEBSITE_ID: "site-id",
     UMAMI_HOSTNAME: "app.noirwire.example",
@@ -103,9 +108,13 @@ export async function startApi(env: Record<string, string> = {}): Promise<Api> {
       headers: {
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         ...(bearer === null ? {} : { authorization: `Bearer ${bearer}` }),
-        "x-real-ip":
-          options.ip ??
-          `10.${(addresses >> 16) & 255}.${(addresses >> 8) & 255}.${addresses & 255}`,
+        ...(options.ip === null
+          ? {}
+          : {
+              "x-real-ip":
+                options.ip ??
+                `10.${(addresses >> 16) & 255}.${(addresses >> 8) & 255}.${addresses & 255}`,
+            }),
         ...options.headers,
       },
       body,

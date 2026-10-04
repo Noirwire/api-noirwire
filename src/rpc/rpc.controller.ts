@@ -1,7 +1,8 @@
 import { Controller, Inject, Post, Req, Res } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
-import { rateRefusal } from "../common/core/answer.js";
+import { busyRefusal, rateRefusal } from "../common/core/answer.js";
+import { PROVIDER_RETRY_AFTER_SECONDS } from "../common/core/providerGate.js";
 import { routeBudgets, type QuotaStore } from "../common/core/quota.js";
 import type { Relay } from "../common/core/relay.js";
 import { Admission } from "../common/http/admission.js";
@@ -16,12 +17,13 @@ import {
 import { callerOf, type SessionRequest } from "../common/http/caller.js";
 import { send } from "../common/http/send.js";
 import type { Config } from "../config/core/config.js";
-import { CONFIG, QUOTAS, RELAY } from "../tokens.js";
+import type { RpcGates } from "../core.module.js";
+import { CONFIG, QUOTAS, RELAY, RPC_GATES } from "../tokens.js";
 import {
   ALLOWED_METHODS,
   readRpcCall,
-  RPC_HEAVY_LIMITS,
-  RPC_LIMITS,
+  rpcHeavyLimits,
+  rpcLimits,
   RPC_MAX_BODY_BYTES,
   RPC_MAX_RESPONSE_BYTES,
 } from "./core/rpc.js";
@@ -34,6 +36,7 @@ export class RpcController {
     @Inject(CONFIG) private readonly config: Config,
     @Inject(QUOTAS) private readonly quotas: QuotaStore,
     @Inject(RELAY) private readonly relay: Relay,
+    @Inject(RPC_GATES) private readonly gates: RpcGates,
   ) {}
 
   @Post()
@@ -52,7 +55,7 @@ export class RpcController {
       "",
       "**Forwarded upstream:** the body, a JSON content type and a fixed user agent. **Not forwarded:** the caller's IP, token, session id, origin, referer, cookies, browser name, or any other header. **Returned:** the provider's status and body, only when the body is JSON and at most 4 MB; none of its headers.",
       "",
-      "**Quotas (per minute):** 600 per session, 6,000 per address, 30,000 in total. The calls that cost the provider real work or reach the chain (`getTokenAccountsByOwner`, `getTransaction`, `sendTransaction`, `simulateTransaction`) also count against a smaller budget: 120 per session, 1,200 per address, 6,000 in total.",
+      "**Quotas follow the provider's allowance.** The RPC provider allows this server's key a fixed number of requests a second, counted together whoever they are for. This server sends it fewer than that (`RPC_PROVIDER_RPS`, 8 a second unless configured), so no caller can spend the allowance for everyone. Requests wait in a line per session and the lines are served in turn, so a quiet session is served however loud another is; a request that would wait more than about 400 ms is answered `429 rate_limited` with a `Retry-After` header. The calls that cost the provider real work or reach the chain (`getTokenAccountsByOwner`, `getTransaction`, `sendTransaction`, `simulateTransaction`) are held to half of that rate as well. Per minute, a session may take at most half of what the provider rate allows, an address at most all of it (at the default: 240 and 480; for the costly calls 60 and 240). The costliest reads (`getProgramAccounts`, `getSignaturesForAddress`) are not on the list and never pass.",
       "",
       "**Logged:** the route, the status and the duration. Never the method's parameters, an address or a transaction.",
     ].join("\n"),
@@ -105,14 +108,20 @@ export class RpcController {
   async call(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
     const admitted = await this.admission.forSession(req, {
       route: "rpc",
-      limits: RPC_LIMITS,
+      limits: rpcLimits(this.config.rpcProviderRps),
       maxBodyBytes: RPC_MAX_BODY_BYTES,
     });
     if ("refused" in admitted) return send(res, admitted.refused);
     const reading = readRpcCall(admitted.body);
     if ("refused" in reading) return send(res, reading.refused);
-    const heavy = routeBudgets("rpc-heavy", callerOf(req, this.config), RPC_HEAVY_LIMITS);
+    const caller = callerOf(req, this.config);
+    const heavy = routeBudgets("rpc-heavy", caller, rpcHeavyLimits(this.config.rpcProviderRps));
     if (reading.heavy && !this.quotas.take(heavy)) return send(res, rateRefusal());
+    // The provider's own allowance, shared fairly between the sessions asking.
+    const granted =
+      (!reading.heavy || (await this.gates.heavy.acquire(caller.sessionId))) &&
+      (await this.gates.all.acquire(caller.sessionId));
+    if (!granted) return send(res, busyRefusal(PROVIDER_RETRY_AFTER_SECONDS));
     send(
       res,
       await this.relay("rpc", this.config.rpcUrl, {

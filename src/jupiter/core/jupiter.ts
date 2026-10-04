@@ -45,8 +45,15 @@ export const JUPITER_ROUTES: Readonly<Record<string, Route>> = {
 export const JUPITER_MAX_BODY_BYTES = 16 * 1024;
 /** An order with its route and transaction is about ten kilobytes; the list of lending vaults is the largest answer. */
 export const JUPITER_MAX_RESPONSE_BYTES = 1024 * 1024;
-/** A pie reviews and places up to ten orders back to back. */
-export const JUPITER_LIMITS: RouteLimits = { perSession: 120, perIp: 1_200, total: 3_000 };
+/**
+ * From what Jupiter allows this server's key: the route's total for a minute
+ * is what the provider gate lets through in one; a session may take at most
+ * half. A pie reviews and places up to ten orders back to back.
+ */
+export function jupiterLimits(providerRps: number): RouteLimits {
+  const total = providerRps * 60;
+  return { perSession: Math.ceil(total / 2), perIp: total, total };
+}
 
 /** A flat object of strings: what a body that becomes a query has to be. */
 const flatStrings = z.record(z.string(), z.string());

@@ -1,7 +1,8 @@
 import { Controller, Get, Inject, Param, Post, Req, Res } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
-import { refusal } from "../common/core/answer.js";
+import { busyRefusal, refusal } from "../common/core/answer.js";
+import { PROVIDER_RETRY_AFTER_SECONDS, type ProviderGate } from "../common/core/providerGate.js";
 import type { Relay } from "../common/core/relay.js";
 import { Admission } from "../common/http/admission.js";
 import {
@@ -12,12 +13,12 @@ import {
   SessionRequired,
   UpstreamFailures,
 } from "../common/http/api-docs.js";
-import type { SessionRequest } from "../common/http/caller.js";
+import { callerOf, type SessionRequest } from "../common/http/caller.js";
 import { send } from "../common/http/send.js";
 import type { Config } from "../config/core/config.js";
-import { CONFIG, RELAY } from "../tokens.js";
+import { CONFIG, JUPITER_GATE, RELAY } from "../tokens.js";
 import {
-  JUPITER_LIMITS,
+  jupiterLimits,
   JUPITER_MAX_BODY_BYTES,
   JUPITER_MAX_RESPONSE_BYTES,
   jupiterRoute,
@@ -29,7 +30,7 @@ const SHARED = [
   "",
   "**Forwarded upstream:** the listed fields or the body, a fixed user agent and this server's Jupiter API key. **Not forwarded:** the caller's IP, token, session id, origin, referer, cookies or browser name, or any query string. **Returned:** Jupiter's status and body, only when the body is JSON and at most 1 MB; none of its headers.",
   "",
-  "**Quotas (per minute):** 120 per session, 1,200 per address, 3,000 in total, shared by every Jupiter path.",
+  "**Quotas follow Jupiter's allowance.** This server sends Jupiter fewer requests a second than Jupiter allows its key (`JUPITER_PROVIDER_RPS`, 5 unless configured), across every Jupiter path and its own price reads. Requests wait in a line per session, served in turn; one that would wait more than about 400 ms is answered `429 rate_limited` with `Retry-After`. Per minute, a session may take at most half of what that rate allows and an address at most all of it (at the default: 150 and 300).",
   "",
   "**Logged:** the route pattern, the status and the duration. Never the path's fields, an address or a transaction.",
 ].join("\n");
@@ -59,6 +60,7 @@ export class JupiterController {
     private readonly admission: Admission,
     @Inject(CONFIG) private readonly config: Config,
     @Inject(RELAY) private readonly relay: Relay,
+    @Inject(JUPITER_GATE) private readonly gate: ProviderGate,
   ) {}
 
   @Get("*path")
@@ -177,13 +179,17 @@ export class JupiterController {
 
     const admitted = await this.admission.forSession(req, {
       route: "jupiter",
-      limits: JUPITER_LIMITS,
+      limits: jupiterLimits(this.config.jupiterProviderRps),
       maxBodyBytes: JUPITER_MAX_BODY_BYTES,
     });
     if ("refused" in admitted) return send(res, admitted.refused);
 
     const plan = planJupiter(route, method, path, admitted.body, req.originalUrl.includes("?"));
     if ("refused" in plan) return send(res, plan.refused);
+    // Jupiter's own allowance for this server's key, shared fairly between the sessions asking.
+    if (!(await this.gate.acquire(callerOf(req, this.config).sessionId))) {
+      return send(res, busyRefusal(PROVIDER_RETRY_AFTER_SECONDS));
+    }
     const { apiKey, url } = this.config.jupiter;
     send(
       res,

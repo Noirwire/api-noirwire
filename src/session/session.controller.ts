@@ -14,43 +14,17 @@ import type { Sessions } from "./core/sessions.js";
 /**
  * Starting a session is the one thing anyone can ask for without a token,
  * and each one is a new set of quotas, so it is rationed harder than
- * anything else: per address, and in total.
+ * anything else: per address and in total, by the hour, at limits the
+ * operator sets. A wallet starts one only when it has none or its last was
+ * retired; everything else is a refresh.
  */
-export const SESSION_START_LIMITS = {
-  perIpPerMinute: 20,
-  perIpPerHour: 300,
-  totalPerMinute: 300,
-  totalPerHour: 6_000,
-};
 export const SESSION_REFRESH_LIMITS = { perIpPerMinute: 60, totalPerMinute: 1_200 };
 const START_MAX_BODY_BYTES = 1024;
 const REFRESH_MAX_BODY_BYTES = 2 * 1024;
 
-const startBudgets = (ip: string): Budget[] => [
-  {
-    scope: "ip",
-    key: `session-start|minute|${ip}`,
-    limit: SESSION_START_LIMITS.perIpPerMinute,
-    windowMs: MINUTE_MS,
-  },
-  {
-    scope: "ip",
-    key: `session-start|hour|${ip}`,
-    limit: SESSION_START_LIMITS.perIpPerHour,
-    windowMs: HOUR_MS,
-  },
-  {
-    scope: "global",
-    key: "session-start|minute",
-    limit: SESSION_START_LIMITS.totalPerMinute,
-    windowMs: MINUTE_MS,
-  },
-  {
-    scope: "global",
-    key: "session-start|hour",
-    limit: SESSION_START_LIMITS.totalPerHour,
-    windowMs: HOUR_MS,
-  },
+const startBudgets = (ip: string, limits: Config["sessionStarts"]): Budget[] => [
+  { scope: "ip", key: `session-start|${ip}`, limit: limits.perIpPerHour, windowMs: HOUR_MS },
+  { scope: "global", key: "session-start", limit: limits.perHour, windowMs: HOUR_MS },
 ];
 
 const refreshBudgets = (ip: string): Budget[] => [
@@ -152,7 +126,7 @@ export class SessionController {
     description: [
       "Hands out the token every other `/v1` route asks for. Needs no token itself and takes no input: any body is ignored.",
       "",
-      "**Who calls it:** a wallet with no session, or one whose session was refused as expired or invalid.",
+      "**Who calls it:** a wallet with no session, or one whose session was refused as `session_expired` or `session_invalid`. In every other case a wallet renews the session it has with `POST /v1/session/refresh`: starting sessions is rationed far harder than renewing them.",
       "",
       WHAT_A_SESSION_IS,
       "",
@@ -160,7 +134,9 @@ export class SessionController {
       "",
       "**Contains wallet addresses: no.** Nothing about a wallet is asked for, and a session is never tied to one.",
       "",
-      "**Quotas:** 20 a minute and 300 an hour per address; 300 a minute and 6,000 an hour in total.",
+      "**Quotas:** per hour, 10 per client address and 600 in total unless the operator has configured otherwise (`SESSION_STARTS_PER_IP_PER_HOUR`, `SESSION_STARTS_PER_HOUR`). Past either the answer is `429 rate_limited`.",
+      "",
+      "**The client address** is the one the hosting platform reports. One operator mechanism exists beside it and is not for third parties: the web app's own server, which forwards its pages' requests, proves itself with a shared secret in `X-NoirWire-Edge` and reports the browser's address in `X-NoirWire-Client-IP`, so web users are counted by their own address and not by that server's. Without the matching secret both headers are ignored.",
       "",
       "**Kept by this API:** nothing. The session lives at the identity provider as an anonymous user with no attributes. This server holds a counter per session for at most an hour and writes it nowhere.",
     ].join("\n"),
@@ -172,7 +148,7 @@ export class SessionController {
   @UNAVAILABLE
   @BodyLimits(START_MAX_BODY_BYTES)
   async start(@Req() req: Request, @Res() res: Response): Promise<void> {
-    const budgets = startBudgets(ipOf(req, this.config));
+    const budgets = startBudgets(ipOf(req, this.config), this.config.sessionStarts);
     const admitted = await this.admission.with(req, budgets, START_MAX_BODY_BYTES);
     if ("refused" in admitted) return send(res, admitted.refused);
     send(res, await this.sessions.start());

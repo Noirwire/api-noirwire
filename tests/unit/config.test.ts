@@ -50,6 +50,10 @@ describe("the configuration", () => {
       },
       allowedOrigins: ["https://app.example.com"],
       trustedProxyHops: 0,
+      edgeSecret: null,
+      rpcProviderRps: 8,
+      jupiterProviderRps: 5,
+      sessionStarts: { perIpPerHour: 10, perHour: 600 },
       analytics: null,
     });
   });
@@ -141,6 +145,39 @@ describe("the configuration", () => {
     expect(loadConfig({ ...base, TRUSTED_PROXY_HOPS: "1" }).trustedProxyHops).toBe(1);
     expect(problems({ ...base, TRUSTED_PROXY_HOPS: "2" })).toMatch(/TRUSTED_PROXY_HOPS/);
     expect(problems({ ...base, TRUSTED_PROXY_HOPS: "true" })).toMatch(/TRUSTED_PROXY_HOPS/);
+  });
+
+  it("takes the provider rates and the session budgets as whole numbers in range", () => {
+    const config = loadConfig({
+      ...base,
+      RPC_PROVIDER_RPS: "40",
+      JUPITER_PROVIDER_RPS: "9",
+      SESSION_STARTS_PER_IP_PER_HOUR: "3",
+      SESSION_STARTS_PER_HOUR: "100",
+    });
+    expect(config.rpcProviderRps).toBe(40);
+    expect(config.jupiterProviderRps).toBe(9);
+    expect(config.sessionStarts).toEqual({ perIpPerHour: 3, perHour: 100 });
+    for (const name of [
+      "RPC_PROVIDER_RPS",
+      "JUPITER_PROVIDER_RPS",
+      "SESSION_STARTS_PER_IP_PER_HOUR",
+      "SESSION_STARTS_PER_HOUR",
+    ]) {
+      for (const value of ["0", "-1", "1.5", "many", "99999999999"]) {
+        expect(problems({ ...base, [name]: value }), `${name}=${value}`).toMatch(
+          new RegExp(`${name} must be a whole number`),
+        );
+      }
+    }
+  });
+
+  it("takes an edge secret only when it is long enough to be one", () => {
+    const secret = "an-edge-secret-of-at-least-32-characters";
+    expect(loadConfig({ ...base, EDGE_SHARED_SECRET: secret }).edgeSecret).toBe(secret);
+    const message = problems({ ...base, EDGE_SHARED_SECRET: "short" });
+    expect(message).toMatch(/EDGE_SHARED_SECRET must be at least 32/);
+    expect(message).not.toContain("short\n");
   });
 
   it("bounds how long a session may live", () => {

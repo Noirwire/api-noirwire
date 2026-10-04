@@ -17,11 +17,7 @@ import { NEUTRAL_USER_AGENT } from "../../common/core/relay.js";
  * joins a wallet's requests together changes with it.
  */
 
-export type SessionsConfig = {
-  supabaseUrl: string;
-  publishableKey: string;
-  sessionMaxAgeMs: number;
-};
+export type SessionsConfig = { supabaseUrl: string; publishableKey: string };
 
 export type Sessions = {
   start(now?: number): Promise<Answer>;
@@ -40,7 +36,6 @@ const issued = z.object({
   access_token: z.string().min(1).max(4_096),
   refresh_token: z.string().min(1).max(512),
   expires_at: z.number().int().positive(),
-  user: z.object({ created_at: z.string().optional() }).optional(),
 });
 
 export function createSessions(
@@ -107,26 +102,19 @@ export function createSessions(
 
   /**
    * The session as the wallet gets it, once this server's own verifier
-   * accepts the token: a session it would refuse on the next request is not
-   * handed out.
+   * accepts the token: a session it would refuse on the next request (past
+   * its maximum age, or of an age that cannot be told) is not handed out.
    */
   async function handOut(json: unknown, now: number): Promise<Answer> {
     const session = issued.safeParse(json);
     if (!session.success) return refused("unavailable", "supabase_answer_not_a_session");
-    let startedAt: number | null;
     try {
-      startedAt = (await deps.verify(session.data.access_token, now)).startedAt;
+      await deps.verify(session.data.access_token, now);
     } catch (error) {
       if (error instanceof AuthError && error.failure === "session_expired") {
         return refused("session_expired", "session_past_max_age");
       }
       return refused("unavailable", "issued_token_not_verified");
-    }
-    const created = Date.parse(session.data.user?.created_at ?? "");
-    const began = startedAt ?? (Number.isFinite(created) ? created : null);
-    // A session whose age cannot be told is treated as too old, not as new.
-    if (began === null || now - began > config.sessionMaxAgeMs) {
-      return refused("session_expired", "session_past_max_age");
     }
     return answer(200, {
       accessToken: session.data.access_token,

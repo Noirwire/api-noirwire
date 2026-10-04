@@ -60,7 +60,7 @@ enable_manual_linking = false
 # Supabase counts these per address, and the only address it ever sees is
 # the API's. So they bound every wallet together and must sit above the
 # API's own totals (see docs/deploy.md); the API is what rations callers.
-anonymous_users = 6000
+anonymous_users = 600
 token_refresh = 6000
 
 [auth.email]

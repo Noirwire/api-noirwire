@@ -133,11 +133,11 @@ describe("POST /v1/session", () => {
     });
   });
 
-  it("rations sessions per address: the twenty-first in a minute is refused, another address is served", async () => {
+  it("rations sessions per address: the eleventh in an hour is refused, another address is served", async () => {
     const statuses: number[] = [];
-    for (let i = 0; i < 22; i += 1) statuses.push((await start({ ip: "203.0.113.62" })).status);
-    expect(statuses.slice(0, 20).every((status) => status === 200)).toBe(true);
-    expect(statuses.slice(20)).toEqual([429, 429]);
+    for (let i = 0; i < 12; i += 1) statuses.push((await start({ ip: "203.0.113.62" })).status);
+    expect(statuses.slice(0, 10).every((status) => status === 200)).toBe(true);
+    expect(statuses.slice(10)).toEqual([429, 429]);
     const refused = await start({ ip: "203.0.113.62" });
     expect(refused.json).toEqual({
       code: "rate_limited",
@@ -145,14 +145,34 @@ describe("POST /v1/session", () => {
     });
     expect((await start({ ip: "203.0.113.63" })).status).toBe(200);
     // What was refused never reached the identity provider.
-    expect(api.providers.sentTo("supabase")).toHaveLength(21);
+    expect(api.providers.sentTo("supabase")).toHaveLength(11);
   });
 
-  it("rations sessions in total, whoever asks", async () => {
-    const statuses: number[] = [];
-    for (let i = 0; i < 302; i += 1) statuses.push((await start()).status);
-    expect(statuses.slice(0, 300).every((status) => status === 200)).toBe(true);
-    expect(statuses.slice(300)).toEqual([429, 429]);
+  it("rations sessions in total, whoever asks, at the limits the operator sets", async () => {
+    const tight = await startApi({
+      SESSION_STARTS_PER_HOUR: "5",
+      SESSION_STARTS_PER_IP_PER_HOUR: "2",
+    });
+    try {
+      tight.providers.answer("supabase", async (request) => {
+        const reply = (await supabase(request)) as Reply;
+        if (request.path === "/auth/v1/signup") {
+          (reply.body as { access_token: string }).access_token = await tight.token({ startedAt });
+        }
+        return request.path.endsWith("jwks.json")
+          ? { body: { keys: tight.providers.state.jwks } }
+          : reply;
+      });
+      const begin = (ip?: string) =>
+        tight.call("/v1/session", { method: "POST", token: null, ip }).then((r) => r.status);
+      expect([await begin("203.0.113.70"), await begin("203.0.113.70")]).toEqual([200, 200]);
+      expect(await begin("203.0.113.70")).toBe(429);
+      expect([await begin(), await begin(), await begin()]).toEqual([200, 200, 200]);
+      // Five in total: nobody gets a sixth.
+      expect(await begin()).toBe(429);
+    } finally {
+      await tight.close();
+    }
   });
 
   it("passes the identity provider's own rate limit on as 429", async () => {

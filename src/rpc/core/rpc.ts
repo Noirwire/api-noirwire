@@ -31,8 +31,9 @@ export const ALLOWED_METHODS: ReadonlySet<string> = new Set([
 
 /**
  * The calls that cost the provider real work or reach the chain. They get a
- * budget of their own, well under the one for plain reads: a trade needs
- * about four of them, a ten-order pie about forty.
+ * budget and a provider allowance of their own, well under the ones for
+ * plain reads. The costliest reads of all (`getProgramAccounts`,
+ * `getSignaturesForAddress`) are not on the list above and never pass.
  */
 export const HEAVY_METHODS: ReadonlySet<string> = new Set([
   "getTokenAccountsByOwner",
@@ -49,9 +50,26 @@ export const RPC_MAX_BODY_BYTES = 64 * 1024;
  * few hundred kilobytes. The ceiling sits well above those.
  */
 export const RPC_MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
-/** A balance refresh is a handful of requests and a confirmation two a second; an import is a burst of about a hundred. */
-export const RPC_LIMITS: RouteLimits = { perSession: 600, perIp: 6_000, total: 30_000 };
-export const RPC_HEAVY_LIMITS: RouteLimits = { perSession: 120, perIp: 1_200, total: 6_000 };
+/**
+ * The limits follow from what the provider allows this server's key. The
+ * route's total for a minute is what the provider gate lets through in one;
+ * a session may take at most half of that, an address at most all of it. A
+ * balance refresh is a handful of requests, a confirmation two a second, an
+ * import a burst of about a hundred.
+ */
+export function rpcLimits(providerRps: number): RouteLimits {
+  const total = providerRps * 60;
+  return { perSession: Math.ceil(total / 2), perIp: total, total };
+}
+
+/** The share of the provider's allowance the costly calls may take: half. */
+export const heavyRps = (providerRps: number) => Math.max(1, Math.floor(providerRps / 2));
+
+/** The same rule for the costly calls, over their smaller allowance. A trade needs about four of them. */
+export function rpcHeavyLimits(providerRps: number): RouteLimits {
+  const total = heavyRps(providerRps) * 60;
+  return { perSession: Math.ceil(total / 4), perIp: total, total };
+}
 
 const call = z.strictObject({
   jsonrpc: z.literal("2.0"),

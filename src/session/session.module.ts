@@ -19,7 +19,6 @@ import { SessionController } from "./session.controller.js";
           {
             supabaseUrl: config.auth.supabaseUrl,
             publishableKey: config.auth.publishableKey,
-            sessionMaxAgeMs: config.auth.sessionMaxAgeMs,
           },
           { fetch, verify, log },
         ),

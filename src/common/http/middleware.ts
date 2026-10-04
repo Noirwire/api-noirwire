@@ -72,8 +72,8 @@ export function responseDeadline(ms = RESPONSE_DEADLINE_MS): Middleware {
 
 const ALLOWED_METHODS = "GET, POST";
 const ALLOWED_HEADERS = "Authorization, Content-Type";
-/** `Age` says how old a cached price is; a browser may not read it unless it is named here. */
-const EXPOSED_HEADERS = "Age";
+/** How old a cached price is, and when to try again: a browser may not read either unless it is named here. */
+const EXPOSED_HEADERS = "Age, Retry-After";
 const PREFLIGHT_MAX_AGE_SECONDS = "600";
 
 /**

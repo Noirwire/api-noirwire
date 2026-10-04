@@ -136,8 +136,9 @@ describe("verifying a session token against the project's published keys", () =>
   });
 
   it("refuses a token with no expiry, no subject, or no usable session id", async () => {
-    const sign = (payload: Record<string, unknown>) =>
-      new SignJWT(payload)
+    const amr = [{ method: "anonymous", timestamp: Math.floor(Date.now() / 1000) - 60 }];
+    const sign = (claims: Record<string, unknown>) =>
+      new SignJWT({ amr, ...claims })
         .setProtectedHeader({ alg: "ES256", kid: current.kid })
         .setIssuer(keys.issuer)
         .setAudience("authenticated")
@@ -280,8 +281,33 @@ describe("the age of a session", () => {
     expect(await failure(token)).toBe("session_expired");
   });
 
-  it("reports no start for a token that records none", async () => {
-    const token = await sessionToken(current, { issuer: keys.issuer, startedAt: null });
-    expect((await verify(token)).startedAt).toBeNull();
+  it("fails closed: a token whose session age cannot be told is refused as expired", async () => {
+    const without = await sessionToken(current, { issuer: keys.issuer, startedAt: null });
+    expect(await failure(without)).toBe("session_expired");
+    for (const amr of [
+      [],
+      "anonymous",
+      [{ method: "anonymous" }],
+      [{ method: "anonymous", timestamp: "1791098459" }],
+      [{ method: "anonymous", timestamp: 0 }],
+      [{ method: "anonymous", timestamp: -5 }],
+      [null],
+    ]) {
+      const token = await sessionToken(current, {
+        issuer: keys.issuer,
+        startedAt: null,
+        extra: { amr },
+      });
+      expect(await failure(token), JSON.stringify(amr)).toBe("session_expired");
+    }
+    // A fresh `iat` does not stand in for it: every refresh renews that.
+    const hs = await sharedSecretToken(SECRET, { issuer: keys.issuer, startedAt: null });
+    expect(await failure(hs, verifier({ jwtSecret: SECRET }))).toBe("session_expired");
+  });
+
+  it("reports when the session began", async () => {
+    const startedAt = Math.floor(Date.now() / 1000) - 3_600;
+    const token = await sessionToken(current, { issuer: keys.issuer, startedAt });
+    expect((await verify(token)).startedAt).toBe(startedAt * 1000);
   });
 });

@@ -11,6 +11,7 @@ export type SessionRequest = Request & { session?: Session };
 export function ipOf(req: Request, config: Config): string {
   return clientIp({
     trustedProxyHops: config.trustedProxyHops,
+    edgeSecret: config.edgeSecret,
     socketAddress: req.socket.remoteAddress,
     header: (name) => {
       const value = req.headers[name];
