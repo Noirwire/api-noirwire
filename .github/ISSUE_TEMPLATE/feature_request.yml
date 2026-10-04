@@ -1,0 +1,36 @@
+name: Feature request
+description: Suggest a change to the NoirWire API
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: What would you like?
+      description: Describe the change and the problem it solves.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any workarounds or other approaches you have thought about.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: route
+    attributes:
+      label: Route
+      options:
+        - Session
+        - Solana RPC
+        - Jupiter
+        - Private payments
+        - Fee relayer
+        - Prices / history
+        - Usage events
+        - Docs / OpenAPI
+        - Other
+    validations:
+      required: false

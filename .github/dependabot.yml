@@ -1,0 +1,32 @@
+version: 2
+updates:
+  # Minor and patch updates only, in one weekly pull request. A major version
+  # is a decision, not a routine bump, so those are raised by hand.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - version-update:semver-major
+      # Pinned to the versions the wallets run, so the transaction checks
+      # here and there are compiled against the same libraries.
+      - dependency-name: "@solana/web3.js"
+      - dependency-name: "@solana/spl-token"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      github-actions:
+        patterns:
+          - "*"

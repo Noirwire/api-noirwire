@@ -1,0 +1,37 @@
+name: Live checks
+
+# Read-only calls through a running copy of this API to the real providers
+# (the RPC provider, Jupiter, the identity provider). They need real network
+# access and a deployment to call, so they never run on a push or a pull
+# request: dispatch manually only.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: Live suite (read-only, against a running copy)
+    runs-on: ubuntu-latest
+    environment: live-checks
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # API_LIVE_URL is the address of a running copy of this API. The suite
+      # starts an anonymous session there and makes read-only calls. It signs
+      # nothing, sends no transaction and spends nothing.
+      - name: Live tests
+        run: npm run test:live
+        env:
+          API_LIVE_URL: ${{ secrets.API_LIVE_URL }}
