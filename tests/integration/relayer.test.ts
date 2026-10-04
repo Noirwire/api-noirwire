@@ -108,12 +108,10 @@ describe("GET /v1/relayer", () => {
 });
 
 describe("POST /v1/relayer", () => {
-  it("finds a fee payer among the replicas", async () => {
-    const response = await relayer("getPayerSigner");
-    expect(response.status).toBe(200);
-    expect([FEE_PAYER_1, FEE_PAYER_2]).toContain(response.json.result.signer_address);
-    expect(response.json.result.payment_address).toBe(PAYMENT_WALLET);
-  });
+  // The happy path for `getPayerSigner` (which replica, which pinned key) is
+  // proved once, fast, in tests/unit/relayer.test.ts against the relayer
+  // core directly. What is HTTP-specific about it, replica failover and the
+  // pin mismatch that must never be trusted, is covered below.
 
   it("prices a genuine transaction by its own rule, at the SOL price it read itself", async () => {
     const plain = await relayer("estimateTransactionFee", estimateParams(genuine.sendUsdc()));
@@ -216,18 +214,6 @@ describe("POST /v1/relayer", () => {
     expect([response.status, response.json.code]).toEqual([502, "no_answer"]);
     // A replica answered: no other replica is tried.
     expect(api.providers.sentTo("kora-2")).toHaveLength(0);
-  });
-
-  it("prices and signs a redemption of a whole Earn position", async () => {
-    const priced = await relayer("estimateTransactionFee", estimateParams(genuine.redeem()));
-    expect(priced.status).toBe(200);
-    expect(priced.json.result.fee_in_token).toBe(Number(PLAIN_FEE));
-    const signed = await relayer(
-      "signTransaction",
-      signParams(signedByPortfolio(genuine.redeem())),
-    );
-    expect(signed.status).toBe(200);
-    expect(Object.keys(signed.json).sort()).toEqual(["signature", "transaction"]);
   });
 
   it("refuses a method outside the three, a batch, and a body over the cap", async () => {

@@ -21,6 +21,7 @@
     "format:check": "prettier --check .",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:all": "npm test && npm run test:integration",
     "test:live": "vitest run --config vitest.live.config.ts",
     "openapi": "nest build && node scripts/export-openapi.mjs",
     "supabase:start": "supabase start",

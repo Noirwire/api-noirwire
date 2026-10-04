@@ -1,7 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { startApi, type Api } from "./support/harness.js";
 
-/** The limits a caller meets over real HTTP. Each test has a process, and so a set of counters, of its own. */
+/**
+ * The limits a caller meets over real HTTP. Each test has a process, and so
+ * a set of counters, of its own.
+ *
+ * The budget arithmetic itself (per-session, per-address and per-route
+ * caps, window resets) is proved once, fast and deterministically, in
+ * `tests/unit/quota.test.ts` against the quota store directly. What stays
+ * here is what only exists once the HTTP layer is in the loop: the client
+ * address resolution (and its header-spoofing defences), and the provider
+ * gate's real concurrency behaviour.
+ *
+ * The provider's-allowance tests below still pace themselves with a real
+ * `setTimeout`-based `pause`. A clock injected through the gate's own `now`
+ * seam was tried (`vi.useFakeTimers()` plus the already-injectable clock)
+ * and dropped: driving fake timers while a real server answers a real
+ * concurrent flood of sockets produced spurious `ECONNRESET`s that do not
+ * happen under real time, which is a worse trade than the wall-clock cost.
+ */
 
 const ADDRESS = "GThUX1Atko4tqhN2NaiTazWSeFWMuiUvfFnyJyUghFMJ";
 const SECRET = "an-edge-secret-of-at-least-32-characters";
@@ -26,37 +43,6 @@ async function statuses(count: number, request: (index: number) => Promise<{ sta
 describe("rate limits per caller", () => {
   beforeEach(async () => {
     api = await startApi();
-  });
-
-  it("stops one session past its per-minute limit, and only that session", async () => {
-    const token = await api.token();
-    const within = await statuses(60, () => api.call(TRANSFER, { token, body: transfer }));
-    expect(within.every((status) => status === 200)).toBe(true);
-
-    const over = await api.call(TRANSFER, { token, body: transfer });
-    expect(over.status).toBe(429);
-    expect(over.json.code).toBe("rate_limited");
-    expect((await api.call(TRANSFER, { body: transfer })).status).toBe(200);
-    // The session is the key, whatever address it comes from.
-    const elsewhere = await api.call(TRANSFER, { token, ip: "198.51.100.200", body: transfer });
-    expect(elsewhere.status).toBe(429);
-    expect(api.providers.sentTo("magicblock")).toHaveLength(61);
-  });
-
-  it("stops one address past its limit, however many sessions it holds", async () => {
-    const ip = "198.51.100.10";
-    const within = await statuses(600, () => api.call(TRANSFER, { ip, body: transfer }));
-    expect(within.every((status) => status === 200)).toBe(true);
-    expect((await api.call(TRANSFER, { ip, body: transfer })).status).toBe(429);
-    expect((await api.call(TRANSFER, { body: transfer })).status).toBe(200);
-  });
-
-  it("stops everyone once a route's total for the minute is spent", async () => {
-    const within = await statuses(1_200, () => api.call(TRANSFER, { body: transfer }));
-    expect(within.every((status) => status === 200)).toBe(true);
-    expect((await api.call(TRANSFER, { body: transfer })).status).toBe(429);
-    // Other routes have totals of their own.
-    expect((await api.call("/v1/rpc", { body: call("getBalance") })).status).toBe(200);
   });
 
   it("does not count a request that failed its token check against anyone's quota", async () => {

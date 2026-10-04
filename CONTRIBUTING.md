@@ -8,10 +8,11 @@ Run all of these. CI runs the same checks and a pull request does not merge unti
 npm run lint
 npm run typecheck
 npm run format:check
-npm test
-npm run test:integration
+npm run test:all
 npm run build
 ```
+
+`npm run test:all` runs the unit suite then the integration suite. `npm test` alone only runs the unit suite, so an HTTP or contract failure in `tests/integration/` would not show up before a commit: run `test:all`, not `test`.
 
 `npm run format` fixes formatting. A change to a route's documentation or shape also needs `npm run openapi`, which rewrites `docs/openapi.json`; an integration test fails while it is stale.
 
@@ -25,6 +26,10 @@ npm run build
 ## Tests
 
 Every change comes with its tests. A new rule has a test for each branch; a fixed bug has a test that failed before the fix. A new refusal is tested twice: in the `core/` logic, and over HTTP in `tests/integration/`.
+
+- Give each test one failure it uniquely catches; repeat across layers only where the boundary changes.
+- Assert money, keys, authorization, accessibility or an observable decision; never exact prose or an input echoed back.
+- Keep one real crypto round trip per boundary; seed fixtures elsewhere and use controlled clocks, not sleeps.
 
 ## The structure rule
 
