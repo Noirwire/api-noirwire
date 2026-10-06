@@ -20,6 +20,9 @@ type Route = {
   asQuery?: readonly string[];
 };
 
+/** The one read that names nobody and is the same for everyone: the lending vaults and their rates. */
+export const VAULTS_PATH = "lend/v1/earn/tokens";
+
 export const JUPITER_ROUTES: Readonly<Record<string, Route>> = {
   "POST swap/v2/order": {
     asQuery: [
@@ -33,7 +36,7 @@ export const JUPITER_ROUTES: Readonly<Record<string, Route>> = {
     ],
   },
   "POST swap/v2/execute": {},
-  "GET lend/v1/earn/tokens": {},
+  [`GET ${VAULTS_PATH}`]: {},
   "POST lend/v1/earn/earnings": { asQuery: ["user", "positions"] },
   "POST lend/v1/earn/deposit": {},
   "POST lend/v1/earn/withdraw": {},
@@ -41,6 +44,16 @@ export const JUPITER_ROUTES: Readonly<Record<string, Route>> = {
   "POST lend/v1/earn/deposit-instructions": {},
   "POST lend/v1/earn/withdraw-instructions": {},
 };
+
+/**
+ * How long the vault list is served before Jupiter is asked again, and how
+ * much longer a copy may stand in while Jupiter does not answer. A rate
+ * moves by hundredths of a percent over an hour, and a vault's share price
+ * by less; a deposit or a withdrawal reads its price from the chain, never
+ * from this list.
+ */
+export const VAULTS_TTL_MS = 5 * 60_000;
+export const VAULTS_STALE_MS = 60 * 60_000;
 
 export const JUPITER_MAX_BODY_BYTES = 16 * 1024;
 /** An order with its route and transaction is about ten kilobytes; the list of lending vaults is the largest answer. */

@@ -1,8 +1,13 @@
 import { Controller, Get, Inject, Param, Post, Req, Res } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiParam, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
-import { busyRefusal, refusal } from "../common/core/answer.js";
-import { PROVIDER_RETRY_AFTER_SECONDS, type ProviderGate } from "../common/core/providerGate.js";
+import { busyRefusal, refusal, type Answer } from "../common/core/answer.js";
+import { createCache } from "../common/core/cached.js";
+import {
+  PROVIDER_RETRY_AFTER_SECONDS,
+  SERVER_KEY,
+  type ProviderGate,
+} from "../common/core/providerGate.js";
 import type { Relay } from "../common/core/relay.js";
 import { Admission } from "../common/http/admission.js";
 import { ApiErrors, EXAMPLE, ok, passedThrough } from "../common/http/api-docs.js";
@@ -17,6 +22,9 @@ import {
   JUPITER_MAX_RESPONSE_BYTES,
   jupiterRoute,
   planJupiter,
+  VAULTS_PATH,
+  VAULTS_STALE_MS,
+  VAULTS_TTL_MS,
 } from "./core/jupiter.js";
 
 const SHARED = [
@@ -66,6 +74,8 @@ export class JupiterController {
       "| `lend/v1/earn/tokens` | The Jupiter Lend vaults and their rates |",
       "",
       "**Who calls it:** the wallets' Earn screen.",
+      "",
+      "**Read once for everyone.** Jupiter is asked for the list at most once every five minutes, however many callers ask; a copy up to an hour past that is still served while a fresh one is fetched, so the rates stay on screen through a gap at Jupiter. The `Age` header says how many seconds old the list is. A failed read is never kept.",
       "",
       "**Refused:** any other path (404). As on every route, a query string is refused (400): the wallet sends none, so none is ever passed on.",
       "",
@@ -213,19 +223,52 @@ export class JupiterController {
 
     const plan = planJupiter(route, method, path, admitted.body);
     if ("refused" in plan) return send(res, plan.refused);
+    if (method === "GET" && path === VAULTS_PATH) return send(res, await this.vaultList());
     // Jupiter's own allowance for this server's key, shared fairly between the sessions asking.
     if (!(await this.gate.acquire(callerOf(req, this.config).sessionId))) {
       return send(res, busyRefusal(PROVIDER_RETRY_AFTER_SECONDS));
     }
+    send(res, await this.ask(plan.upstream));
+  }
+
+  private ask(upstream: { method: "GET" | "POST"; pathAndQuery: string; body?: string }) {
     const { apiKey, url } = this.config.jupiter;
-    send(
-      res,
-      await this.relay("jupiter", `${url}/${plan.upstream.pathAndQuery}`, {
-        method: plan.upstream.method,
-        body: plan.upstream.body,
-        headers: apiKey ? { "x-api-key": apiKey } : {},
-        maxResponseBytes: JUPITER_MAX_RESPONSE_BYTES,
-      }),
-    );
+    return this.relay("jupiter", `${url}/${upstream.pathAndQuery}`, {
+      method: upstream.method,
+      body: upstream.body,
+      headers: apiKey ? { "x-api-key": apiKey } : {},
+      maxResponseBytes: JUPITER_MAX_RESPONSE_BYTES,
+    });
+  }
+
+  /** The vault list is the same for everyone, so Jupiter is asked for it once for everyone. */
+  private readonly vaults = createCache({
+    load: async () => {
+      // The server's own read counts against Jupiter's allowance too.
+      if (!(await this.gate.acquire(SERVER_KEY))) {
+        throw new NotKept(busyRefusal(PROVIDER_RETRY_AFTER_SECONDS));
+      }
+      const read = await this.ask({ method: "GET", pathAndQuery: VAULTS_PATH });
+      if (read.status !== 200) throw new NotKept(read);
+      return read.body;
+    },
+    ttlMs: VAULTS_TTL_MS,
+    staleMs: VAULTS_STALE_MS,
+  });
+
+  private async vaultList(): Promise<Answer> {
+    try {
+      const { value, ageSeconds } = await this.vaults();
+      return { status: 200, body: value, headers: { Age: String(ageSeconds) } };
+    } catch (error) {
+      return error instanceof NotKept ? error.answer : refusal("upstream_failed");
+    }
+  }
+}
+
+/** An answer that is passed to whoever asked and never held for the next caller. */
+class NotKept extends Error {
+  constructor(readonly answer: Answer) {
+    super();
   }
 }

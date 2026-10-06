@@ -232,7 +232,9 @@ describe("the provider's allowance", () => {
     const startedAt = Date.now();
     const pending: Promise<{ status: number }>[] = [];
     while (Date.now() - startedAt < 1_500) {
-      for (let i = 0; i < 10; i += 1) pending.push(api.call("/v1/jupiter/lend/v1/earn/tokens"));
+      for (let i = 0; i < 10; i += 1) {
+        pending.push(api.call("/v1/jupiter/swap/v2/execute", { body: {} }));
+      }
       await pause(25);
     }
     const answers = await Promise.all(pending);

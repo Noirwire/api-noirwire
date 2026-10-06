@@ -342,15 +342,27 @@ describe("GET|POST /v1/jupiter/*", () => {
     });
   });
 
-  it("reads the lending vaults with a GET", async () => {
+  it("reads the lending vaults once for everyone, and never keeps a failed read", async () => {
+    api.providers.answer("jupiter", () => ({ status: 500, body: { message: "down" } }));
+    expect((await api.call("/v1/jupiter/lend/v1/earn/tokens")).status).toBe(500);
+
     api.providers.answer("jupiter", () => ({ body: [{ symbol: "USDC" }] }));
-    const response = await api.call("/v1/jupiter/lend/v1/earn/tokens");
-    expect(response.status).toBe(200);
-    expect(response.json).toEqual([{ symbol: "USDC" }]);
-    expect(api.providers.sentTo("jupiter")[0]).toMatchObject({
-      method: "GET",
-      path: "/lend/v1/earn/tokens",
-    });
+    const answers = await Promise.all(
+      Array.from({ length: 5 }, () => api.call("/v1/jupiter/lend/v1/earn/tokens")),
+    );
+    for (const response of answers) {
+      expect(response.status).toBe(200);
+      expect(response.json).toEqual([{ symbol: "USDC" }]);
+      expect(response.headers.get("age")).toBe("0");
+    }
+    const sent = api.providers.sentTo("jupiter");
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({ method: "GET", path: "/lend/v1/earn/tokens" });
+
+    api.providers.answer("jupiter", () => ({ status: 500, body: { message: "down" } }));
+    const later = await api.call("/v1/jupiter/lend/v1/earn/tokens");
+    expect([later.status, later.json]).toEqual([200, [{ symbol: "USDC" }]]);
+    expect(api.providers.sentTo("jupiter")).toHaveLength(2);
   });
 
   it("turns an earnings read into a GET with only its two fields", async () => {
