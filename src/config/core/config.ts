@@ -274,7 +274,7 @@ export function loadConfig(env: Env): Config {
 }
 
 /** The hard maximum the profile program allows any deployment. */
-const PROFILE_HARD_MAX_DATA_LEN = 4_096;
+export const PROFILE_HARD_MAX_DATA_LEN = 4_096;
 
 /** The gate's keypair from the 64 bytes of its secret key written as a JSON array, or null. */
 function gateKeypair(value: string): Keypair | null {

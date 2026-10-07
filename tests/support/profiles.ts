@@ -8,6 +8,7 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
+import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 
 /**
  * Profile transactions as a wallet builds them, and every hostile variation
@@ -26,7 +27,43 @@ const DISCRIMINATOR = {
   close: [167, 36, 181, 8, 136, 158, 46, 207],
 };
 
-export const MAX_DATA_LEN = 64;
+/** Well above the 40 bytes most of these carry, so that a hostile shape is refused for what it is and not for its size. */
+export const MAX_DATA_LEN = 256;
+
+/** Where the message starts in a creation or a write: after the count of signatures and the two of them. */
+export const MESSAGE_AT = 1 + 2 * 64;
+
+/** A length as Solana writes one: seven bits a byte, low bits first. */
+const shortVec = (length: number) => {
+  const bytes: number[] = [];
+  for (let rest = length; ; rest >>= 7) {
+    if (rest < 0x80) return Buffer.from([...bytes, rest]);
+    bytes.push((rest & 0x7f) | 0x80);
+  }
+};
+
+const ED25519_PKCS8_PREFIX = Buffer.from("302e020100300506032b657004220420", "hex");
+const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
+
+const privateKeyOf = (keypair: Keypair) =>
+  createPrivateKey({
+    key: Buffer.concat([ED25519_PKCS8_PREFIX, keypair.secretKey.subarray(0, 32)]),
+    format: "der",
+    type: "pkcs8",
+  });
+
+/** Whether `signature` is `signer`'s over `message`, by Node's own ed25519 and nothing of this server's. */
+export const verified = (signer: PublicKey, message: Uint8Array, signature: Uint8Array) =>
+  verify(
+    null,
+    message,
+    createPublicKey({
+      key: Buffer.concat([ED25519_SPKI_PREFIX, signer.toBuffer()]),
+      format: "der",
+      type: "spki",
+    }),
+    signature,
+  );
 
 export const profileOf = (programId: PublicKey, owner: PublicKey) =>
   PublicKey.findProgramAddressSync([Buffer.from("profile"), owner.toBuffer()], programId)[0];
@@ -118,6 +155,38 @@ export function profileScenario() {
     write: (bytes?: Buffer) =>
       bytesOf(compile([instruction("write", owner.publicKey, bytes)], gate.publicKey)),
     close: () => bytesOf(compile([instruction("close")], owner.publicKey)),
+    /**
+     * A creation or a write with a record of any size, written out byte by
+     * byte: the library refuses to write a transaction over Solana's 1,232
+     * bytes, and the rollup takes far larger ones.
+     */
+    byHand: (kind: "create" | "write", bytes: Buffer) => {
+      const made = instruction(kind, owner.publicKey, bytes);
+      const others = made.keys.filter(({ pubkey }) => !pubkey.equals(gate.publicKey));
+      const readOnly = others.filter((key) => !key.isSigner && !key.isWritable);
+      const keys = [
+        gate.publicKey,
+        ...others.filter((key) => key.isSigner).map(({ pubkey }) => pubkey),
+        ...others.filter((key) => !key.isSigner && key.isWritable).map(({ pubkey }) => pubkey),
+        ...readOnly.map(({ pubkey }) => pubkey),
+        made.programId,
+      ];
+      const indexOf = (wanted: PublicKey) => keys.findIndex((key) => key.equals(wanted));
+      const message = Buffer.concat([
+        Buffer.from([2, 1, readOnly.length + 1]),
+        shortVec(keys.length),
+        ...keys.map((key) => key.toBuffer()),
+        Keypair.generate().publicKey.toBuffer(),
+        shortVec(1),
+        Buffer.from([indexOf(made.programId)]),
+        shortVec(made.keys.length),
+        Buffer.from(made.keys.map(({ pubkey }) => indexOf(pubkey))),
+        shortVec(made.data.length),
+        made.data,
+      ]);
+      const ownerSignature = sign(null, message, privateKeyOf(owner));
+      return Buffer.concat([shortVec(2), Buffer.alloc(64), ownerSignature, message]);
+    },
     /** The same creation built with the older `Transaction` class, which orders the account keys differently. */
     createWithLegacyClass: () => {
       const transaction = new Transaction({
@@ -306,9 +375,33 @@ export function profileScenario() {
         built("close", (made) => (made.keys[2].pubkey = profileOf(programId, stranger.publicKey))),
       "accounts",
     ],
-    "bytes after the transaction": [
+    "bytes after the message": [
       () => Buffer.concat([genuine.create(), Buffer.alloc(1)]),
-      "not_canonical",
+      "trailing_bytes",
+    ],
+    "one signature fewer than the message's header counts": [
+      () => Buffer.concat([Buffer.from([1]), genuine.create().subarray(1 + 64)]),
+      "signature_count",
+    ],
+    "one signature more than the message's header counts": [
+      () => Buffer.concat([Buffer.from([3]), Buffer.alloc(64), genuine.create().subarray(1)]),
+      "signature_count",
+    ],
+    "a key count that runs past the end of the bytes": [
+      () => {
+        const bytes = Buffer.from(genuine.create());
+        bytes[MESSAGE_AT + 3] = 0x7f;
+        return bytes;
+      },
+      "not_a_transaction",
+    ],
+    "a record length that runs past the end of the bytes": [
+      () => genuine.write().subarray(0, -3),
+      "not_a_transaction",
+    ],
+    "a count written the long way round": [
+      () => Buffer.concat([Buffer.from([0x82, 0x00]), genuine.create().subarray(1)]),
+      "not_a_transaction",
     ],
     "not a transaction at all": [() => Buffer.from("not a transaction"), "not_a_transaction"],
   };

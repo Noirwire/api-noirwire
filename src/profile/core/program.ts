@@ -98,6 +98,7 @@ export const PROGRAM_ERRORS: readonly string[] = [
   "UnknownLayout",
   "BelowRent",
   "Overflow",
+  "NotNominee",
 ];
 
 /**

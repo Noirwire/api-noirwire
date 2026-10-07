@@ -3918,7 +3918,7 @@
             }
           },
           "413": {
-            "description": "The request body is larger than 16,384 bytes. Reading stops at the limit.",
+            "description": "The request body is larger than 8,212 bytes. Reading stops at the limit.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4293,7 +4293,7 @@
             }
           },
           "413": {
-            "description": "The request body is larger than 16,384 bytes. Reading stops at the limit.",
+            "description": "The request body is larger than 8,212 bytes. Reading stops at the limit.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4657,7 +4657,7 @@
             }
           },
           "413": {
-            "description": "The request body is larger than 16,384 bytes. Reading stops at the limit.",
+            "description": "The request body is larger than 8,212 bytes. Reading stops at the limit.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5018,7 +5018,7 @@
             }
           },
           "413": {
-            "description": "The request body is larger than 16,384 bytes. Reading stops at the limit.",
+            "description": "The request body is larger than 8,212 bytes. Reading stops at the limit.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5196,7 +5196,7 @@
     },
     "/v1/profile/submit": {
       "post": {
-        "description": "Sends one profile transaction to the rollup and waits for it to land. For a creation or a write this server adds the gate key's signature as fee payer; a closing is the owner's alone and is sent as it came. Neither the owner nor the gate needs any SOL.\n\n**Who calls it:** the wallets, when their labels changed, or when a profile is removed.\n\n**This is not a signing service, and the session does not make it one.** Every check below is made on the transaction itself before the gate signs or anything is sent:\n\n- It is a legacy transaction with no address lookup table and exactly one instruction, for the profile program: `create_profile`, `write_profile` or `close_profile`. No priority fee and nothing else rides along.\n- Its accounts are exactly that instruction's, in the program's order, each with the signer and writable flags the program expects: the fixed addresses, and the sponsor, the profile and its permission account worked out again here from the owner key in the instruction. The message lists no other account and no other signer.\n- A creation or a write names the gate as fee payer and carries the owner's own valid signature; its record is not empty and no longer than `maxDataLen`.\n- A closing names the owner as fee payer, carries the owner's valid signature and no argument.\n- The bytes sent in are exactly that transaction and nothing after it.\n\n**Creations are rationed hardest**, because each one spends rent: 3 an hour per session, 10 an hour per address, and a ceiling on how many are signed in 24 hours in total, whoever asks. When the ceiling is reached a creation is answered `429` and everything else goes on. Writes are held to 30 an hour per session. A transaction that was refused is not counted.\n\n**Sending the same transaction twice is safe.** Two byte-identical transactions are one transaction: the rollup runs it once, and the second request is answered with the outcome of the first.\n\n**Contains wallet addresses: no.** The owner is a key derived from the recovery phrase for the profile alone. It is never the funding wallet's key and never a portfolio's, and nothing that names one is accepted here.\n\n**Forwarded upstream:** the transaction, with the read token, to the rollup. **Returned:** its id. The rollup's own messages are never passed on.\n\n**Quotas (per minute):** 60 per session, 600 per address, 1,200 in total, shared by the six profile routes.\n\n**Logged:** the route pattern, the status and the duration, and for a refusal one fixed word. Never a key, a token, a challenge, a transaction or a record.",
+        "description": "Sends one profile transaction to the rollup and waits for it to land. For a creation or a write this server adds the gate key's signature as fee payer; a closing is the owner's alone and is sent as it came. Neither the owner nor the gate needs any SOL.\n\n**Who calls it:** the wallets, when their labels changed, or when a profile is removed.\n\n**This is not a signing service, and the session does not make it one.** Every check below is made on the transaction itself before the gate signs or anything is sent:\n\n- It is a legacy transaction with no address lookup table and exactly one instruction, for the profile program: `create_profile`, `write_profile` or `close_profile`. No priority fee and nothing else rides along.\n- Its accounts are exactly that instruction's, in the program's order, each with the signer and writable flags the program expects: the fixed addresses, and the sponsor, the profile and its permission account worked out again here from the owner key in the instruction. The message lists no other account and no other signer.\n- A creation or a write names the gate as fee payer and carries the owner's own valid signature; its record is not empty and no longer than `maxDataLen`.\n- A closing names the owner as fee payer, carries the owner's valid signature and no argument.\n- The bytes sent in are exactly that transaction, written the one way a transaction is written, with nothing after it, and no longer than a creation with a record of `maxDataLen` bytes. That may be well over Solana's 1,232 bytes: the rollup takes larger transactions, and a wallet writes such a one out by hand because the usual libraries refuse to.\n- What is sent on is those same bytes. The gate's signature is written into its place over the very message the owner signed; nothing is written out again.\n\n**Creations are rationed hardest**, because each one spends rent: 3 an hour per session, 10 an hour per address, and a ceiling on how many are signed in 24 hours in total, whoever asks. When the ceiling is reached a creation is answered `429` and everything else goes on. Writes are held to 30 an hour per session. A transaction that was refused is not counted.\n\n**Sending the same transaction twice is safe.** Two byte-identical transactions are one transaction: the rollup runs it once, and the second request is answered with the outcome of the first.\n\n**Contains wallet addresses: no.** The owner is a key derived from the recovery phrase for the profile alone. It is never the funding wallet's key and never a portfolio's, and nothing that names one is accepted here.\n\n**Forwarded upstream:** the transaction, with the read token, to the rollup. **Returned:** its id. The rollup's own messages are never passed on.\n\n**Quotas (per minute):** 60 per session, 600 per address, 1,200 in total, shared by the six profile routes.\n\n**Logged:** the route pattern, the status and the duration, and for a refusal one fixed word. Never a key, a token, a challenge, a transaction or a record.",
         "operationId": "ProfileController_submit",
         "parameters": [],
         "requestBody": {
@@ -5216,7 +5216,7 @@
                   "transaction": {
                     "type": "string",
                     "description": "The profile transaction, signed by the owner. A whole serialized transaction, base64.",
-                    "maxLength": 8192
+                    "maxLength": 6100
                   }
                 }
               },
@@ -5447,7 +5447,7 @@
             }
           },
           "413": {
-            "description": "The request body is larger than 16,384 bytes. Reading stops at the limit.",
+            "description": "The request body is larger than 8,212 bytes. Reading stops at the limit.",
             "content": {
               "application/json": {
                 "schema": {

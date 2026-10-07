@@ -11,13 +11,15 @@ import {
   programErrorOf,
   type ProfileAction,
 } from "../../src/profile/core/program.js";
+import { PROFILE_IDL } from "../support/profileIdl.js";
 
 /**
  * What this server knows of the profile program is a copy: the error
  * numbers, the discriminators and each instruction's accounts. These hold
- * the copy to the program's own IDL, as its build writes it in a checkout of
- * the program beside this repository. Without that checkout there is
- * nothing to compare with, and they are skipped.
+ * the copy to the program's own IDL, of which `tests/support/profileIdl.ts`
+ * keeps the parts that matter here, so they run everywhere. Where a checkout
+ * of the program sits beside this repository, that copy is itself held to
+ * the IDL the program's build wrote, which is how a stale one is noticed.
  */
 
 const IDL_PATH = "../profile-noirwire/target/idl/noirwire_profile.json";
@@ -35,26 +37,51 @@ const INSTRUCTION: Record<ProfileAction, string> = {
   close: "close_profile",
 };
 
-describe.skipIf(!existsSync(IDL_PATH))("the profile program, against its IDL", () => {
-  const idl = (): Idl => JSON.parse(readFileSync(IDL_PATH, "utf8")) as Idl;
+describe.skipIf(!existsSync(IDL_PATH))("the copy of the IDL, against the program's build", () => {
+  const built = (): Idl => JSON.parse(readFileSync(IDL_PATH, "utf8")) as Idl;
+
+  it("has the program's address and its three profile instructions exactly", () => {
+    expect(PROFILE_IDL.address).toBe(built().address);
+    for (const copied of PROFILE_IDL.instructions) {
+      const found = built().instructions.find(({ name }) => name === copied.name);
+      expect(found?.discriminator, copied.name).toEqual(copied.discriminator);
+      const accounts = found?.accounts.map(({ name, signer, writable, address }) => ({
+        name,
+        ...(signer ? { signer } : {}),
+        ...(writable ? { writable } : {}),
+        ...(address ? { address } : {}),
+      }));
+      expect(accounts, copied.name).toEqual(copied.accounts);
+    }
+  });
+
+  // The program may have gained errors since the copy was made; none that was copied may have moved.
+  it("numbers every error it lists as the program does", () => {
+    const numbered = Object.fromEntries(built().errors.map(({ code, name }) => [name, code]));
+    for (const { code, name } of PROFILE_IDL.errors) expect(numbered[name], name).toBe(code);
+  });
+});
+
+describe("the profile program, against its IDL", () => {
+  const idl = (): Idl => PROFILE_IDL;
   const instruction = (action: ProfileAction) => {
     const found = idl().instructions.find((entry) => entry.name === INSTRUCTION[action]);
     if (!found) throw new Error(`The IDL has no ${INSTRUCTION[action]}.`);
     return found;
   };
 
-  it("numbers every error as the program does", () => {
-    const numbered = Object.fromEntries(
-      PROGRAM_ERRORS.map((name, index) => [FIRST_PROGRAM_ERROR + index, name]),
-    );
-    expect(numbered).toEqual(
-      Object.fromEntries(idl().errors.map(({ code, name }) => [code, name])),
-    );
+  // The program may gain errors after the ones copied here; what is copied must not move.
+  it("numbers every error it knows as the program does", () => {
+    const numbered = Object.fromEntries(idl().errors.map(({ code, name }) => [name, code]));
+    for (const [index, name] of PROGRAM_ERRORS.entries()) {
+      expect(numbered[name], name).toBe(FIRST_PROGRAM_ERROR + index);
+    }
   });
 
-  it("reads each of the program's errors out of a failed transaction by its own number", () => {
-    for (const { code, name } of idl().errors) {
-      expect(programErrorOf({ InstructionError: [0, { Custom: code }] }), name).toBe(name);
+  it("reads each error a wallet acts on out of a failed transaction by the program's own number", () => {
+    const numbered = Object.fromEntries(idl().errors.map(({ code, name }) => [name, code]));
+    for (const name of PROFILE_CONFLICTS) {
+      expect(programErrorOf({ InstructionError: [0, { Custom: numbered[name] }] })).toBe(name);
     }
   });
 

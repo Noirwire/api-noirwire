@@ -295,6 +295,18 @@ describe("the creation budgets", () => {
     expect((await submit(api, creation())).status).toBe(200);
   });
 
+  it("turns a transaction one byte over the largest away unread: nothing signed, sent or counted", async () => {
+    const api = profiles({ dailyCreateCap: 1 });
+    const over = genuine.create(record(MAX_DATA_LEN + 1));
+    expect(await outcome(submit(api, over))).toEqual([422, "refused"]);
+    expect(logged).toEqual([
+      { event: "refusal", route: "profile", status: 422, reason: "too_large" },
+    ]);
+    expect(signed).toBe(0);
+    expect(calls).toHaveLength(0);
+    expect((await submit(api, creation())).status).toBe(200);
+  });
+
   it("does not count a refused transaction against the cap", async () => {
     const api = profiles({ dailyCreateCap: 1 });
     for (const [build] of Object.values(hostile)) await submit(api, build());

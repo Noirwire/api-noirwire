@@ -1,0 +1,62 @@
+// Copied from the profile program's IDL (target/idl/noirwire_profile.json in its repository): regenerate it when the program changes.
+export const PROFILE_IDL = {
+  address: "AiS6fT2x5XELHvZPrLfdzydC9xUazjS6r4z4bNDTqtHQ",
+  instructions: [
+    {
+      name: "create_profile",
+      discriminator: [225, 205, 234, 143, 17, 186, 50, 220],
+      accounts: [
+        { name: "gate", signer: true },
+        { name: "owner", signer: true },
+        { name: "sponsor", writable: true },
+        { name: "profile", writable: true },
+        { name: "permission", writable: true },
+        { name: "permission_program", address: "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1" },
+        { name: "vault", writable: true, address: "MagicVau1t999999999999999999999999999999999" },
+        { name: "magic_program", address: "Magic11111111111111111111111111111111111111" },
+      ],
+    },
+    {
+      name: "write_profile",
+      discriminator: [42, 24, 36, 43, 230, 170, 36, 247],
+      accounts: [
+        { name: "gate", signer: true },
+        { name: "owner", signer: true },
+        { name: "sponsor", writable: true },
+        { name: "profile", writable: true },
+        { name: "vault", writable: true, address: "MagicVau1t999999999999999999999999999999999" },
+        { name: "magic_program", address: "Magic11111111111111111111111111111111111111" },
+      ],
+    },
+    {
+      name: "close_profile",
+      discriminator: [167, 36, 181, 8, 136, 158, 46, 207],
+      accounts: [
+        { name: "owner", signer: true },
+        { name: "sponsor", writable: true },
+        { name: "profile", writable: true },
+        { name: "permission", writable: true },
+        { name: "permission_program", address: "ACLseoPoyC3cBqoUtkbjZ4aDrkurZW86v19pXz2XQnp1" },
+        { name: "vault", writable: true, address: "MagicVau1t999999999999999999999999999999999" },
+        { name: "magic_program", address: "Magic11111111111111111111111111111111111111" },
+      ],
+    },
+  ],
+  errors: [
+    { code: 6000, name: "NotUpgradeAuthority" },
+    { code: 6001, name: "NotAdmin" },
+    { code: 6002, name: "GateMissing" },
+    { code: 6003, name: "Paused" },
+    { code: 6004, name: "EmptyRecord" },
+    { code: 6005, name: "RecordTooLarge" },
+    { code: 6006, name: "InvalidSizeLimit" },
+    { code: 6007, name: "ProfileExists" },
+    { code: 6008, name: "ProfileMissing" },
+    { code: 6009, name: "NotOwner" },
+    { code: 6010, name: "StaleRevision" },
+    { code: 6011, name: "UnknownLayout" },
+    { code: 6012, name: "BelowRent" },
+    { code: 6013, name: "Overflow" },
+    { code: 6014, name: "NotNominee" },
+  ],
+};

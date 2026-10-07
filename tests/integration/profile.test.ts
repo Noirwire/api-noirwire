@@ -1,9 +1,12 @@
 import { Keypair, Transaction } from "@solana/web3.js";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { base58 } from "../../src/chain/core/bytes.js";
-import { CREATIONS_PER_HOUR_PER_SESSION } from "../../src/profile/core/profiles.js";
+import {
+  CREATIONS_PER_HOUR_PER_SESSION,
+  PROFILE_MAX_BODY_BYTES,
+} from "../../src/profile/core/profiles.js";
 import { FIRST_PROGRAM_ERROR, PROGRAM_ERRORS } from "../../src/profile/core/program.js";
-import { MAX_DATA_LEN, profileOf, profileScenario } from "../support/profiles.js";
+import { MESSAGE_AT, profileOf, profileScenario, verified } from "../support/profiles.js";
 import { startApi, type Api } from "./support/harness.js";
 import type { Received, Reply } from "./support/providers.js";
 
@@ -12,7 +15,7 @@ import type { Received, Reply } from "./support/providers.js";
  * its two sign-in calls, and its JSON-RPC behind a read token.
  */
 
-const { programId, gate, owner, genuine, hostile, encode } = profileScenario();
+const { programId, gate, owner, genuine, hostile, encode, record } = profileScenario();
 const OWNER = owner.publicKey.toBase58();
 const GATE_SECRET = JSON.stringify([...gate.secretKey]);
 const READ_TOKEN = "rollup-read-token";
@@ -75,7 +78,6 @@ describe("the profile routes", () => {
       PROFILE_ROLLUP_URL: "{rollup}",
       PROFILE_PROGRAM_ID: programId.toBase58(),
       PROFILE_GATE_SECRET_KEY: GATE_SECRET,
-      PROFILE_MAX_DATA_LEN: String(MAX_DATA_LEN),
     });
   });
   afterAll(() => api.close());
@@ -92,7 +94,7 @@ describe("the profile routes", () => {
       enabled: true,
       programId: programId.toBase58(),
       gate: gate.publicKey.toBase58(),
-      maxDataLen: MAX_DATA_LEN,
+      maxDataLen: 2048,
     });
     expect(api.providers.received).toHaveLength(0);
   });
@@ -210,6 +212,30 @@ describe("the profile routes", () => {
       code: "StaleRevision",
       error: "The profile changed since it was read. Read it again.",
     });
+  });
+
+  it("takes a write far over Solana's 1,232 bytes, and sends on the wallet's own bytes with the gate's signature in its place", async () => {
+    const sent = genuine.byHand("write", record(2_000));
+    const response = await submit(api, sent);
+
+    const forwarded = Buffer.from(rpcCalls(api)[0].params[0] as string, "base64");
+    const message = sent.subarray(MESSAGE_AT);
+    expect(verified(gate.publicKey, message, forwarded.subarray(1, 65))).toBe(true);
+    expect(verified(owner.publicKey, message, forwarded.subarray(65, 129))).toBe(true);
+    expect(forwarded[0]).toBe(sent[0]);
+    expect(forwarded.subarray(65).equals(sent.subarray(65))).toBe(true);
+    expect([response.status, response.json]).toEqual([
+      200,
+      { signature: base58(forwarded.subarray(1, 65)) },
+    ]);
+  });
+
+  it("reads no body longer than the largest submit there can be", async () => {
+    const response = await api.call("/v1/profile/submit", {
+      body: { token: READ_TOKEN, transaction: "A".repeat(PROFILE_MAX_BODY_BYTES) },
+    });
+    expect([response.status, response.json.code]).toEqual([413, "request_too_large"]);
+    expect(api.providers.sentTo("rollup")).toHaveLength(0);
   });
 
   it("refuses what is not a profile transaction before the rollup hears of it", async () => {

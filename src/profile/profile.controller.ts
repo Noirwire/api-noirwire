@@ -18,6 +18,7 @@ import { CONFIG, PROFILES } from "../tokens.js";
 import {
   CREATIONS_PER_HOUR_PER_IP,
   CREATIONS_PER_HOUR_PER_SESSION,
+  MAX_TRANSACTION_CHARS,
   PROFILE_LIMITS,
   PROFILE_MAX_BODY_BYTES,
   WRITES_PER_HOUR_PER_SESSION,
@@ -394,7 +395,8 @@ export class ProfileController {
       "- Its accounts are exactly that instruction's, in the program's order, each with the signer and writable flags the program expects: the fixed addresses, and the sponsor, the profile and its permission account worked out again here from the owner key in the instruction. The message lists no other account and no other signer.",
       "- A creation or a write names the gate as fee payer and carries the owner's own valid signature; its record is not empty and no longer than `maxDataLen`.",
       "- A closing names the owner as fee payer, carries the owner's valid signature and no argument.",
-      "- The bytes sent in are exactly that transaction and nothing after it.",
+      "- The bytes sent in are exactly that transaction, written the one way a transaction is written, with nothing after it, and no longer than a creation with a record of `maxDataLen` bytes. That may be well over Solana's 1,232 bytes: the rollup takes larger transactions, and a wallet writes such a one out by hand because the usual libraries refuse to.",
+      "- What is sent on is those same bytes. The gate's signature is written into its place over the very message the owner signed; nothing is written out again.",
       "",
       `**Creations are rationed hardest**, because each one spends rent: ${CREATIONS_PER_HOUR_PER_SESSION} an hour per session, ${CREATIONS_PER_HOUR_PER_IP} an hour per address, and a ceiling on how many are signed in 24 hours in total, whoever asks. When the ceiling is reached a creation is answered \`429\` and everything else goes on. Writes are held to ${WRITES_PER_HOUR_PER_SESSION} an hour per session. A transaction that was refused is not counted.`,
       "",
@@ -418,7 +420,7 @@ export class ProfileController {
         token: readToken,
         transaction: {
           ...transaction("The profile transaction, signed by the owner."),
-          maxLength: 8192,
+          maxLength: MAX_TRANSACTION_CHARS,
         },
       },
     },

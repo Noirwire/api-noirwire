@@ -11,6 +11,7 @@ import {
   type ErrorCode,
 } from "../../common/core/answer.js";
 import type { Log } from "../../common/core/log.js";
+import { PROFILE_HARD_MAX_DATA_LEN } from "../../config/core/config.js";
 import {
   HOUR_MS,
   type Budget,
@@ -20,7 +21,12 @@ import {
 } from "../../common/core/quota.js";
 import { profileAddress, programErrorOf } from "./program.js";
 import { PROFILE_ROUTE, type Asked, type Rollup, type RpcError } from "./rollup.js";
-import { forRollup, readProfileTransaction, type ProfilePins } from "./transaction.js";
+import {
+  forRollup,
+  maxTransactionBytes,
+  readProfileTransaction,
+  type ProfilePins,
+} from "./transaction.js";
 
 /**
  * The wallet's only way to its profile: a small record of its own labels
@@ -44,9 +50,18 @@ import { forRollup, readProfileTransaction, type ProfilePins } from "./transacti
  * owner key, never named by the caller.
  */
 
-/** A transaction with the largest record a deployment may allow is about 4.6 KB, 6.2 KB encoded. */
-const MAX_TRANSACTION_CHARS = 8_192;
-export const PROFILE_MAX_BODY_BYTES = 16 * 1024;
+const MAX_TOKEN_CHARS = 2_048;
+/**
+ * The longest a transaction can be in base64: the largest one there is with
+ * the largest record any deployment may allow. This and the body cap bound
+ * what is read at all, so they follow from the program's hard maximum and
+ * are the same everywhere; what a deployment itself accepts is held to its
+ * own `maxDataLen` before a transaction is read (transaction.ts).
+ */
+export const MAX_TRANSACTION_CHARS =
+  Math.ceil(maxTransactionBytes(PROFILE_HARD_MAX_DATA_LEN) / 3) * 4;
+/** The largest request: a submit, with the longest transaction and token, and the JSON around them. */
+export const PROFILE_MAX_BODY_BYTES = MAX_TRANSACTION_CHARS + MAX_TOKEN_CHARS + 64;
 /** A sync is a sign-in, a read, a blockhash and a write, and a retry of the last three. */
 export const PROFILE_LIMITS: RouteLimits = { perSession: 60, perIp: 600, total: 1_200 };
 
