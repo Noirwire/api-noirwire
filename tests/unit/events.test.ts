@@ -32,6 +32,19 @@ describe("cleanEvent", () => {
     expect(cleanEvent({ ...base, visitor: "3f1c2a9e-5b7d-4c1e-9a2f-0d6b8e4c7a11" })).toBeNull();
   });
 
+  it("counts a labels sync by where it stopped, and by nothing about the record", () => {
+    const base = { path: "/portfolio" };
+    expect(cleanEvent({ ...base, name: "profile_synced" })).not.toBeNull();
+    expect(
+      cleanEvent({ ...base, name: "profile_sync_failed", data: { stage: "config" } }),
+    ).not.toBeNull();
+    expect(
+      cleanEvent({ ...base, name: "profile_sync_failed", data: { stage: "elsewhere" } }),
+    ).toBeNull();
+    expect(cleanEvent({ ...base, name: "profile_synced", data: { revision: 4 } })).toBeNull();
+    expect(isOnChain("profile_synced")).toBe(true);
+  });
+
   it("refuses what is not an event at all", () => {
     for (const input of [null, undefined, "text", 7, [], {}, { path: 7 }, { name: "sent" }]) {
       expect(cleanEvent(input)).toBeNull();

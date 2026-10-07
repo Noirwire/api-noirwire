@@ -105,6 +105,7 @@ const FIELDS = {
   range: oneOf("1D", "1W", "1M"),
   what: oneOf("funding", "portfolio"),
   kind_of: oneOf("error", "rejection"),
+  stage: oneOf("config", "read", "unreadable", "too_large", "write", "conflict", "save"),
 } satisfies Record<string, (value: unknown) => boolean>;
 
 type Field = keyof typeof FIELDS;
@@ -174,6 +175,10 @@ const ON_CHAIN = {
   funding_failed: ["route", "reason"],
   send_failed: ["reason"],
   earn_failed: ["action", "reason"],
+  // The labels' mirror is written by a transaction too, so a sync is counted
+  // as one: whether it changed anything, and where one that failed stopped.
+  profile_synced: [],
+  profile_sync_failed: ["stage"],
 } as const satisfies Record<string, readonly Field[]>;
 
 const EVENTS = { ...BEFORE_SIGNING, ...ON_CHAIN };
