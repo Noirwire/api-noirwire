@@ -49,6 +49,12 @@ export const ERRORS = {
   method_not_allowed: [403, "This method is not one the wallets use."],
   not_found: [404, "There is nothing at this path."],
   request_timeout: [408, "The request body took too long to arrive."],
+  // The profile program's own refusals, under the names the program gives them.
+  Paused: [409, "Profiles are paused. Nothing was written."],
+  RecordTooLarge: [409, "The record is larger than this deployment allows. Nothing was written."],
+  ProfileExists: [409, "This profile already exists. Nothing was written."],
+  ProfileMissing: [409, "This profile does not exist. Nothing was done."],
+  StaleRevision: [409, "The profile changed since it was read. Read it again."],
   request_too_large: [413, "The request body is too large."],
   refused: [422, "The transaction was refused. Nothing was signed."],
   insufficient_payment: [422, "The payment is below the current price. Nothing was signed."],

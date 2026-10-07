@@ -12,16 +12,17 @@ A wallet address is treated as a secret. What gives one away off chain is not th
 
 ## What is left, plainly
 
-| Who                  | Sees the user's IP                         | Sees addresses                                                | Can link funding wallet to portfolio                                              |
-| -------------------- | ------------------------------------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| This server          | Yes, or the web app's server's (see below) | In transit, every one. Nothing is stored or logged.           | It could, if it logged. It does not, and you have to trust that, or read it here. |
-| The hosting platform | Yes                                        | Not in URLs: addresses travel in request bodies only.         | Not from its request logs, which record a path, a status and an IP.               |
-| RPC provider         | No                                         | Every address read, and every transaction sent.               | Not from any single request. By timing, plausibly: see below.                     |
-| Jupiter              | No                                         | The portfolio that trades or lends. Never the funding wallet. | No.                                                                               |
-| MagicBlock           | No                                         | The funding wallet and the portfolio, in one request.         | Yes. A private transfer cannot be built without naming both.                      |
-| NoirWire's relayer   | No                                         | The portfolio that sends or lends, and its counterparty.      | No. One relayed transaction names one portfolio and never the funding wallet.     |
-| Supabase Auth        | No                                         | None. It is never sent one.                                   | No.                                                                               |
-| NoirWire's analytics | No                                         | None. The event list has no field for one.                    | No.                                                                               |
+| Who                         | Sees the user's IP                         | Sees addresses                                                                                | Can link funding wallet to portfolio                                              |
+| --------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| This server                 | Yes, or the web app's server's (see below) | In transit, every one. Nothing is stored or logged.                                           | It could, if it logged. It does not, and you have to trust that, or read it here. |
+| The hosting platform        | Yes                                        | Not in URLs: addresses travel in request bodies only.                                         | Not from its request logs, which record a path, a status and an IP.               |
+| RPC provider                | No                                         | Every address read, and every transaction sent.                                               | Not from any single request. By timing, plausibly: see below.                     |
+| Jupiter                     | No                                         | The portfolio that trades or lends. Never the funding wallet.                                 | No.                                                                               |
+| MagicBlock                  | No                                         | The funding wallet and the portfolio, in one request.                                         | Yes. A private transfer cannot be built without naming both.                      |
+| NoirWire's relayer          | No                                         | The portfolio that sends or lends, and its counterparty.                                      | No. One relayed transaction names one portfolio and never the funding wallet.     |
+| MagicBlock's private rollup | No                                         | None. A profile's owner is a key derived for the profile alone, and the record is ciphertext. | No.                                                                               |
+| Supabase Auth               | No                                         | None. It is never sent one.                                                                   | No.                                                                               |
+| NoirWire's analytics        | No                                         | None. The event list has no field for one.                                                    | No.                                                                               |
 
 Timing is the honest gap. All of a wallet's requests reach a provider from this server, moments apart. With few users online, a provider that looks for addresses always read together can guess they share an owner. Splitting the requests removes the proof, not the hint. The relay does not delay or pad requests to hide this.
 
@@ -69,6 +70,18 @@ Before a signature, the payment must cover that price (to within 2%, for a price
 The relayer runs as one or more replicas, each with a fee payer key of its own, all pinned in this server's configuration and never learned from the relayer. A replica that does not answer is passed over for the next, freely, while nothing is signed. A transaction names its fee payer, so once the portfolio has signed one only that replica is asked. The answers tell the wallet what it may do next: `503 relayer_unavailable` means nothing was signed (the replica was unreachable, or turned the request away), so the wallet may build again for another; `502 no_answer` means what the replica did is not known, so the wallet waits for the chain to settle that transaction first.
 
 Signing never broadcasts. The wallet gets the signed transaction and its id, records the id, and sends the transaction itself through `/v1/rpc`, so an action can never be in flight without the wallet knowing what to look for. The reason is in [architecture.md](architecture.md).
+
+## Profiles
+
+A profile is a wallet's own labels (portfolio names, icons, the watchlist), encrypted on the device and kept as one small account on MagicBlock's private rollup, so that restoring the recovery phrase elsewhere brings them back. This server and the rollup only ever see ciphertext. The account belongs to a key derived for it alone, never the funding wallet's and never a portfolio's. The feature is optional: without its configuration the routes are not there, and the wallets work the same.
+
+The program takes a creation or a write only with the signature of a gate key, which is held here and nowhere else and is the fee payer of both. A creation spends rent that the program's sponsor puts up. So this is not a signing service either: `src/profile/core/transaction.ts` reads a transaction from its bytes into one of three exact shapes or refuses it. A legacy message with no lookup table and exactly one instruction, for the profile program; that instruction's accounts in the program's order, each with the signer and writable flags the program expects, the sponsor, the profile and its permission account worked out again from the owner key in the instruction; no other account and no other signer in the message; the gate as fee payer of a creation or a write, the owner as fee payer of a closing; the owner's own valid signature; a record that is not empty and no longer than the configured limit. The gate signs the very message that was checked, and only then.
+
+A read names an owner key and never an account: the address is derived here. The rollup's read token is the caller's, travels to the rollup in the query string as the rollup requires, and is never logged.
+
+Creations are rationed harder than anything else here: 3 an hour per session, 10 an hour per address, and a ceiling on how many the gate signs in 24 hours in total (`PROFILE_DAILY_CREATE_CAP`, 500 unless configured). At the ceiling a creation is answered `429` and writes, closings and reads go on. Writes are held to 30 an hour per session. A refused transaction is counted against none of them. Like every counter here these live in the memory of one process, the 24 hours are a fixed window that begins with the first creation counted, and a restart forgets them. The hard limit on what can be lost is the SOL the sponsor holds.
+
+The program's own refusals that a wallet acts on are answered as `409` under the program's name for them (`StaleRevision`, `ProfileExists`, `ProfileMissing`, `Paused`, `RecordTooLarge`). The rollup's messages are never passed on.
 
 ## The service itself
 

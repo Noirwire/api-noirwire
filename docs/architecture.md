@@ -7,6 +7,7 @@ One NestJS service, no database. A wallet calls it; it calls a provider; the ans
                                                  ├─>  NoirWire API  ─┬─>  RPC provider
  mobile wallet (directly)                       ─┘        │          ├─>  Jupiter (trading, lending, prices, charts)
                                                           │          ├─>  MagicBlock private payments
+                                                          │          ├─>  MagicBlock's private rollup (profiles)
                                                           │          ├─>  NoirWire's fee relayer (Kora), private network only
                                                           │          ├─>  NoirWire's analytics server (Umami)
                                                           └──────────┴─>  Supabase Auth (anonymous sessions)
@@ -28,20 +29,21 @@ One NestJS service, no database. A wallet calls it; it calls a provider; the ans
 
 Each module has a `core/` folder of plain functions and a thin controller. `core/` imports no framework and nothing outside a `core/` folder; a lint rule in `eslint.config.mjs` enforces it. That is what lets the unit suite run the transaction checks, the pricing and the budgets without starting anything.
 
-| Folder                  | What lives there                                                                                                                   |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `src/config/core`       | `loadConfig`: every variable read once, every problem named at once, the service refuses to start on any                           |
-| `src/common/core`       | `relay`, `admit`, `readCapped`, the quota store, the client address, the cache, the list of errors (`answer.ts`), the log's fields |
-| `src/common/http`       | The middleware, the exception filter, admission bound to a request, the OpenAPI helpers                                            |
-| `src/auth`              | `core/verifier.ts` (jose) and the global `SessionGuard`                                                                            |
-| `src/session`           | `core/sessions.ts`: the two calls to Supabase Auth, and the maximum age                                                            |
-| `src/rpc`               | The method allow-list and the heavy-method budget                                                                                  |
-| `src/jupiter`           | The path allow-list and the body-to-query translation                                                                              |
-| `src/private-payments`  | The path allow-list                                                                                                                |
-| `src/relayer/core`      | `relayed.ts` (the template), `relayer.ts` (the route's rules), `solPrice.ts` (Pyth), `accountRent.ts` (rent of the real account)   |
-| `src/prices`, `history` | The sources and their caches                                                                                                       |
-| `src/events/core`       | The closed event list and what is forwarded                                                                                        |
-| `src/chain/core`        | The network's USDC mint, the listed trackers, the two chain reads the server makes for itself                                      |
+| Folder                  | What lives there                                                                                                                                                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/config/core`       | `loadConfig`: every variable read once, every problem named at once, the service refuses to start on any                                                                                                            |
+| `src/common/core`       | `relay`, `admit`, `readCapped`, the quota store, the client address, the cache, the list of errors (`answer.ts`), the log's fields                                                                                  |
+| `src/common/http`       | The middleware, the exception filter, admission bound to a request, the OpenAPI helpers                                                                                                                             |
+| `src/auth`              | `core/verifier.ts` (jose) and the global `SessionGuard`                                                                                                                                                             |
+| `src/session`           | `core/sessions.ts`: the two calls to Supabase Auth, and the maximum age                                                                                                                                             |
+| `src/rpc`               | The method allow-list and the heavy-method budget                                                                                                                                                                   |
+| `src/jupiter`           | The path allow-list and the body-to-query translation                                                                                                                                                               |
+| `src/private-payments`  | The path allow-list                                                                                                                                                                                                 |
+| `src/relayer/core`      | `relayed.ts` (the template), `relayer.ts` (the route's rules), `solPrice.ts` (Pyth), `accountRent.ts` (rent of the real account)                                                                                    |
+| `src/profile/core`      | `transaction.ts` (the three profile transactions, and the gate's signature), `program.ts` (the program's accounts and errors), `rollup.ts` (the calls to the rollup), `profiles.ts` (the routes' rules and budgets) |
+| `src/prices`, `history` | The sources and their caches                                                                                                                                                                                        |
+| `src/events/core`       | The closed event list and what is forwarded                                                                                                                                                                         |
+| `src/chain/core`        | The network's USDC mint, the listed trackers, the two chain reads the server makes for itself, ed25519 signing and verifying                                                                                        |
 
 ## State
 

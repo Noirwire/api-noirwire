@@ -19,6 +19,12 @@ const SET_BY_HAND = [
   "ALLOWED_ORIGINS",
   "EDGE_SHARED_SECRET",
   "KORA_PAYMENT_WALLET",
+  // Profiles: kept only when the first three are set (see ../docs/deploy.md).
+  "PROFILE_ROLLUP_URL",
+  "PROFILE_PROGRAM_ID",
+  "PROFILE_GATE_SECRET_KEY",
+  "PROFILE_MAX_DATA_LEN",
+  "PROFILE_DAILY_CREATE_CAP",
 ];
 
 export default defineRailway(() => {

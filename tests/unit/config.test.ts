@@ -40,6 +40,7 @@ describe("the configuration", () => {
       privatePaymentsUrl: "https://payments.magicblock.app",
       priceHistoryUrl: "https://datapi.jup.ag",
       relayer: null,
+      profile: null,
       auth: {
         supabaseUrl: "https://project.supabase.co",
         issuer: "https://project.supabase.co/auth/v1",
@@ -334,6 +335,83 @@ describe("the configuration", () => {
     it("refuses a host name that is not one", () => {
       expect(problems({ ...base, ...umami, UMAMI_HOSTNAME: "https://app.example.com" })).toMatch(
         /UMAMI_HOSTNAME/,
+      );
+    });
+  });
+
+  describe("profiles", () => {
+    const gate = Keypair.generate();
+    const secret = JSON.stringify([...gate.secretKey]);
+    const profile = {
+      PROFILE_ROLLUP_URL: "https://rollup.example.com/",
+      PROFILE_PROGRAM_ID: address(),
+      PROFILE_GATE_SECRET_KEY: secret,
+    };
+
+    it("are kept with the rollup, the program and the gate key set, at the default limits", () => {
+      expect(loadConfig({ ...base, ...profile }).profile).toEqual({
+        rollupUrl: "https://rollup.example.com",
+        programId: profile.PROFILE_PROGRAM_ID,
+        gate: gate.publicKey.toBase58(),
+        gateSecretKey: gate.secretKey,
+        maxDataLen: 2048,
+        dailyCreateCap: 500,
+      });
+    });
+
+    it("are off, and the start is not refused, with any one of the three unset", () => {
+      for (const name of Object.keys(profile)) {
+        expect(loadConfig({ ...base, ...profile, [name]: " " }).profile, name).toBeNull();
+      }
+      // The two limits alone switch nothing on.
+      const limits = { PROFILE_MAX_DATA_LEN: "1024", PROFILE_DAILY_CREATE_CAP: "10" };
+      expect(loadConfig({ ...base, ...limits }).profile).toBeNull();
+    });
+
+    it("refuse a gate key that is not one key's 64 bytes, without repeating it", () => {
+      const other = Keypair.generate();
+      const mismatched = [...gate.secretKey.subarray(0, 32), ...other.secretKey.subarray(32)];
+      for (const value of [
+        "not json",
+        JSON.stringify([...gate.secretKey.subarray(0, 32)]),
+        JSON.stringify(mismatched),
+        JSON.stringify([...gate.secretKey].map(String)),
+        `"${gate.publicKey.toBase58()}"`,
+      ]) {
+        const refused = problems({ ...base, ...profile, PROFILE_GATE_SECRET_KEY: value });
+        expect(refused, value).toMatch(/PROFILE_GATE_SECRET_KEY/);
+        expect(refused).not.toContain(value);
+      }
+    });
+
+    it("refuse a rollup that is not an https URL free of a query, and a program that is not an address", () => {
+      for (const value of [
+        "rollup.example.com",
+        "http://rollup.example.com",
+        "https://rollup.example.com/?token=abc",
+      ]) {
+        expect(problems({ ...base, ...profile, PROFILE_ROLLUP_URL: value }), value).toMatch(
+          /PROFILE_ROLLUP_URL/,
+        );
+      }
+      const local = { ...base, ...profile, PROFILE_ROLLUP_URL: "http://127.0.0.1:6699" };
+      expect(loadConfig(local).profile?.rollupUrl).toBe("http://127.0.0.1:6699");
+      expect(problems({ ...base, ...profile, PROFILE_PROGRAM_ID: "not-an-address" })).toMatch(
+        /PROFILE_PROGRAM_ID/,
+      );
+    });
+
+    it("take a record limit no higher than the program's own maximum, and a daily cap of at least one", () => {
+      const limited = { PROFILE_MAX_DATA_LEN: "4096", PROFILE_DAILY_CREATE_CAP: "25" };
+      expect(loadConfig({ ...base, ...profile, ...limited }).profile).toMatchObject({
+        maxDataLen: 4096,
+        dailyCreateCap: 25,
+      });
+      expect(problems({ ...base, ...profile, PROFILE_MAX_DATA_LEN: "4097" })).toMatch(
+        /PROFILE_MAX_DATA_LEN/,
+      );
+      expect(problems({ ...base, ...profile, PROFILE_DAILY_CREATE_CAP: "0" })).toMatch(
+        /PROFILE_DAILY_CREATE_CAP/,
       );
     });
   });

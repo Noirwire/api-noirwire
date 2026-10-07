@@ -1,6 +1,6 @@
 # Deploying on Railway
 
-One Railway service, `api`, in the relayer's Railway project. Everything except six values is code: `.railway/railway.ts` (builder, health check, restart policy, one replica, the relayer's values by reference) and the defaults in `src/config/core/config.ts`.
+One Railway service, `api`, in the relayer's Railway project. Everything except six values (and the profile values, when profiles are kept) is code: `.railway/railway.ts` (builder, health check, restart policy, one replica, the relayer's values by reference) and the defaults in `src/config/core/config.ts`.
 
 ## Before you start
 
@@ -23,6 +23,20 @@ ALLOWED_ORIGINS=https://app.noirwire.com
 EDGE_SHARED_SECRET=<openssl rand -hex 32, the same value the web app's server holds>
 KORA_PAYMENT_WALLET=<the payment wallet's public key, as in the relayer's kora.toml>
 ```
+
+## Profiles (optional)
+
+Profiles are off until the first three of these are set in the same Raw Editor; with any of them missing `GET /v1/profile/config` answers `enabled: false` and the wallets work as they do without profiles. The last two have defaults.
+
+```
+PROFILE_ROLLUP_URL=https://<the private rollup the profile program runs on>
+PROFILE_PROGRAM_ID=<the profile program's address>
+PROFILE_GATE_SECRET_KEY=<the gate's secret key: the JSON array of 64 bytes in its keypair file, on one line>
+PROFILE_MAX_DATA_LEN=<the record limit the program's sponsor is set to; 2048 when unset>
+PROFILE_DAILY_CREATE_CAP=<the most profile creations signed in 24 hours; 500 when unset>
+```
+
+The gate's public key must be the one the program's sponsor names as its gate. Keep the secret in Railway only, and seal the variable. The key holds no SOL and needs none; what it guards is the sponsor's rent, so `PROFILE_DAILY_CREATE_CAP` bounds what a day can cost.
 
 ## Check it
 

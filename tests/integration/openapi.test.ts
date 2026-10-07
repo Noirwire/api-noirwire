@@ -41,10 +41,16 @@ describe("the OpenAPI document", () => {
       "GET /v1/history/{symbol}/{range}",
       "GET /v1/jupiter/{path}",
       "GET /v1/prices",
+      "GET /v1/profile/config",
       "GET /v1/relayer",
       "POST /v1/events",
       "POST /v1/jupiter/{path}",
       "POST /v1/private-payments/{path}",
+      "POST /v1/profile/blockhash",
+      "POST /v1/profile/challenge",
+      "POST /v1/profile/read",
+      "POST /v1/profile/session",
+      "POST /v1/profile/submit",
       "POST /v1/relayer",
       "POST /v1/rpc",
       "POST /v1/session",
@@ -169,6 +175,15 @@ describe("the OpenAPI document", () => {
     expect(codesOf("POST /v1/rpc", "502")).toEqual(["upstream_failed", "upstream_refused"]);
     expect(codesOf("POST /v1/relayer", "503")).toEqual(["relayer_unavailable", "unavailable"]);
     expect(codesOf("POST /v1/relayer", "422")).toEqual(["insufficient_payment", "refused"]);
+    expect(codesOf("POST /v1/profile/submit", "409")).toEqual([
+      "StaleRevision",
+      "ProfileExists",
+      "ProfileMissing",
+      "Paused",
+      "RecordTooLarge",
+    ]);
+    expect(codesOf("POST /v1/profile/submit", "422")).toEqual(["refused"]);
+    expect(codesOf("POST /v1/profile/read", "404")).toEqual(["not_found"]);
     expect(codesOf("GET /v1/history/{symbol}/{range}", "404")).toEqual(["not_found"]);
     expect(codesOf("GET /v1/prices", "400")).toEqual(["invalid_request"]);
     expect(codesOf("POST /v1/session/refresh", "401")).toEqual([
@@ -201,6 +216,8 @@ describe("the OpenAPI document", () => {
       PublicKey.default.toBase58(),
       new PublicKey(new Uint8Array(32).fill(1)).toBase58(),
       new PublicKey(new Uint8Array(32).fill(2)).toBase58(),
+      // The made-up blockhash, which is written the way an address is.
+      new PublicKey(new Uint8Array(32).fill(3)).toBase58(),
     ];
     const signature = base58(new Uint8Array(64).fill(1));
     let addresses = 0;

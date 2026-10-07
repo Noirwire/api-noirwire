@@ -11,10 +11,17 @@ const MEANING: Record<ErrorCode, string> = {
   session_invalid: "The refresh token is unknown, already used or revoked. Start a new session.",
   origin_not_allowed: "A browser on an origin that is not on this API's list.",
   method_not_allowed: "A JSON-RPC or relayer method outside the route's list. Nothing was done.",
-  not_found: "No such route, or a path, symbol or range outside a route's list.",
+  not_found:
+    "No such route, a path, symbol or range outside a route's list, or a profile route where no profiles are kept.",
   request_timeout: "The body did not arrive within 5 seconds.",
+  Paused: "The profile program is paused: no profile is created or written until it is not.",
+  RecordTooLarge: "The profile program refused a record above its own size limit.",
+  ProfileExists: "A profile was created for a key that already has one. Write to it instead.",
+  ProfileMissing: "A profile was written or closed that does not exist. Create it first.",
+  StaleRevision:
+    "A profile write named a revision that is no longer the stored one. Read, merge and write again.",
   request_too_large: "The body is over the route's size cap.",
-  refused: "The relayer route refused the transaction. Nothing was signed.",
+  refused: "The relayer route or the profile route refused the transaction. Nothing was signed.",
   insufficient_payment:
     "The relayed transaction pays less than the current price. Ask for a new price.",
   rate_limited:
@@ -62,6 +69,8 @@ const DESCRIPTION = [
   "| `POST /v1/private-payments/*` | Yes: the funding wallet and the portfolio together | MagicBlock |",
   "| `POST /v1/relayer` | Yes: the portfolio, its counterparty and the amount | NoirWire's relayer and its RPC provider |",
   "| `GET /v1/relayer` | No | Nobody |",
+  "| `POST /v1/profile/*` | No: a profile's owner is a key derived for the profile alone, never a wallet's. The record is ciphertext | MagicBlock's private rollup |",
+  "| `GET /v1/profile/config` | No | Nobody |",
   "| `GET /v1/prices`, `GET /v1/history/...` | No | Jupiter, asked by this server on its own schedule, not per caller |",
   "| `POST /v1/events` | No: the closed event list has no field for one | NoirWire's analytics server |",
   "| `POST /v1/session`, `POST /v1/session/refresh` | No | The identity provider (Supabase Auth), asked by this server |",

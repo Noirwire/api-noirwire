@@ -4,7 +4,7 @@
 // of it appears in the output. An integration test fails when the committed
 // file no longer matches the code.
 import { writeFile } from "node:fs/promises";
-import { format } from "prettier";
+import { format, resolveConfig } from "prettier";
 import { createApp } from "../dist/app.js";
 import { loadConfig } from "../dist/config/core/config.js";
 import { openApiDocument } from "../dist/openapi.js";
@@ -20,5 +20,7 @@ const document = openApiDocument(app);
 await app.close();
 
 const target = new URL("../docs/openapi.json", import.meta.url);
-await writeFile(target, await format(JSON.stringify(document), { parser: "json" }));
+// Formatted as `npm run format:check` expects the file, by the repository's own Prettier settings.
+const style = await resolveConfig(target);
+await writeFile(target, await format(JSON.stringify(document), { ...style, parser: "json" }));
 console.log(`Wrote docs/openapi.json: ${Object.keys(document.paths).length} paths.`);

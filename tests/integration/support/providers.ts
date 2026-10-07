@@ -15,12 +15,21 @@ import {
 /**
  * One local HTTP server standing in for every provider the API talks to:
  * the RPC provider, Jupiter (trading and prices), Jupiter's chart data,
- * MagicBlock, two Kora replicas, Umami and Supabase Auth. Each lives under
- * its own path prefix, records what it was sent and answers as a test says.
+ * MagicBlock, the private rollup, two Kora replicas, Umami and Supabase
+ * Auth. Each lives under its own path prefix, records what it was sent and
+ * answers as a test says.
  */
 
 export type ProviderName =
-  "rpc" | "jupiter" | "datapi" | "magicblock" | "kora-1" | "kora-2" | "umami" | "supabase";
+  | "rpc"
+  | "jupiter"
+  | "datapi"
+  | "magicblock"
+  | "rollup"
+  | "kora-1"
+  | "kora-2"
+  | "umami"
+  | "supabase";
 
 export type Received = {
   provider: ProviderName;
@@ -110,6 +119,7 @@ export async function startProviders() {
     magicblock: () => ({ body: { transaction: "AQID" } }),
     "kora-1": () => ({ status: 500, body: "no kora configured for this test" }),
     "kora-2": () => ({ status: 500, body: "no kora configured for this test" }),
+    rollup: () => ({ status: 500, body: "no rollup configured for this test" }),
     umami: () => ({ body: { ok: true } }),
     supabase: (request) =>
       request.path === "/auth/v1/.well-known/jwks.json"
@@ -118,12 +128,14 @@ export async function startProviders() {
   };
 
   const server: Server = createServer(async (req, res) => {
-    const [, prefix, ...rest] = (req.url ?? "/").split("/");
+    const [, first, ...rest] = (req.url ?? "/").split("/");
+    // The rollup takes its read token as a query on its own address: `/rollup?token=...`.
+    const [prefix, query] = first.split("?");
     const provider = prefix as ProviderName;
     const request: Received = {
       provider,
       method: req.method ?? "GET",
-      path: `/${rest.join("/")}`,
+      path: query === undefined ? `/${rest.join("/")}` : `/?${[query, ...rest].join("/")}`,
       headers: Object.fromEntries(
         Object.entries(req.headers).map(([name, value]) => [name, String(value)]),
       ),

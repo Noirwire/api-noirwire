@@ -38,24 +38,29 @@ src/
   jupiter/                allow-listed Jupiter paths
   private-payments/       allow-listed MagicBlock paths
   relayer/                the transaction template, the price, the budgets, the replicas
+  profile/                the three profile transactions, the gate's signature, the rollup
   prices/, history/       market data, read once for everyone
   events/                 the closed list of usage events
   chain/core/             the network, the listed trackers, the chain reads
 ```
 
-| Route                            | What it does                                              |
-| -------------------------------- | --------------------------------------------------------- |
-| `GET /health`                    | Liveness, no session                                      |
-| `POST /v1/session`               | Starts an anonymous session                               |
-| `POST /v1/session/refresh`       | Renews one, until it is too old                           |
-| `POST /v1/rpc`                   | One allow-listed Solana JSON-RPC call, no batches         |
-| `GET\|POST /v1/jupiter/*`        | Quotes, orders, landing a swap, Jupiter Lend              |
-| `POST /v1/private-payments/*`    | MagicBlock private transfers                              |
-| `GET\|POST /v1/relayer`          | The relayer's pinned keys; price or co-sign a transaction |
-| `GET /v1/prices`                 | Live prices of every listed asset                         |
-| `GET /v1/history/:symbol/:range` | One tracker's price history                               |
-| `POST /v1/events`                | One usage event from the closed list                      |
-| `GET /docs`, `GET /docs-json`    | The API explained in words, and its OpenAPI document      |
+| Route                                    | What it does                                                                        |
+| ---------------------------------------- | ----------------------------------------------------------------------------------- |
+| `GET /health`                            | Liveness, no session                                                                |
+| `POST /v1/session`                       | Starts an anonymous session                                                         |
+| `POST /v1/session/refresh`               | Renews one, until it is too old                                                     |
+| `POST /v1/rpc`                           | One allow-listed Solana JSON-RPC call, no batches                                   |
+| `GET\|POST /v1/jupiter/*`                | Quotes, orders, landing a swap, Jupiter Lend                                        |
+| `POST /v1/private-payments/*`            | MagicBlock private transfers                                                        |
+| `GET\|POST /v1/relayer`                  | The relayer's pinned keys; price or co-sign a transaction                           |
+| `GET /v1/profile/config`                 | Whether profiles are kept here, and the keys a profile transaction is built against |
+| `POST /v1/profile/challenge`, `/session` | Signing in to the private rollup as a profile's owner                               |
+| `POST /v1/profile/read`, `/blockhash`    | The owner's encrypted profile, and the rollup's blockhash                           |
+| `POST /v1/profile/submit`                | Create, write or close a profile: checked in full, then co-signed and sent          |
+| `GET /v1/prices`                         | Live prices of every listed asset                                                   |
+| `GET /v1/history/:symbol/:range`         | One tracker's price history                                                         |
+| `POST /v1/events`                        | One usage event from the closed list                                                |
+| `GET /docs`, `GET /docs-json`            | The API explained in words, and its OpenAPI document                                |
 
 The full contract, with every refusal, status code and privacy rule, is at `/docs` on a running copy and in [docs/openapi.json](docs/openapi.json). More in [docs/architecture.md](docs/architecture.md) and [docs/privacy-and-safety.md](docs/privacy-and-safety.md).
 
@@ -117,6 +122,8 @@ Railway, one replica: the steps are in [docs/deploy.md](docs/deploy.md).
 ## Environment
 
 Every variable and its default is in [docs/environment.md](docs/environment.md).
+
+Profiles (a wallet's own labels, encrypted on the device and kept on a private rollup) are optional. They are on only when `PROFILE_ROLLUP_URL`, `PROFILE_PROGRAM_ID` and `PROFILE_GATE_SECRET_KEY` are all set; `PROFILE_MAX_DATA_LEN` and `PROFILE_DAILY_CREATE_CAP` have defaults. With any of the first three unset the profile routes answer `404`, `GET /v1/profile/config` says `enabled: false`, and nothing else changes.
 
 ## Security
 

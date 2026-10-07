@@ -1,3 +1,4 @@
+import { Keypair } from "@solana/web3.js";
 import { z } from "zod";
 import { DEVNET_RPC_URL, isAddress, type Network } from "../../chain/core/network.js";
 
@@ -34,6 +35,20 @@ export type AnalyticsConfig = {
   salt: string | null;
 };
 
+export type ProfileConfig = {
+  /** The private rollup the profiles live on. */
+  rollupUrl: string;
+  programId: string;
+  /** The gate's public key: the fee payer of every profile creation and write. */
+  gate: string;
+  /** The gate's 64-byte secret key. Read here once; never logged, returned or put in an error. */
+  gateSecretKey: Uint8Array;
+  /** The largest record a profile may carry, in bytes. */
+  maxDataLen: number;
+  /** The most profile creations the gate signs in one window of 24 hours. */
+  dailyCreateCap: number;
+};
+
 export type Config = {
   port: number;
   network: Network;
@@ -43,6 +58,7 @@ export type Config = {
   privatePaymentsUrl: string;
   priceHistoryUrl: string;
   relayer: RelayerConfig | null;
+  profile: ProfileConfig | null;
   auth: {
     supabaseUrl: string;
     issuer: string;
@@ -236,6 +252,7 @@ export function loadConfig(env: Env): Config {
     privatePaymentsUrl: url("MAGICBLOCK_API_URL", "https://payments.magicblock.app"),
     priceHistoryUrl: url("PRICE_HISTORY_API_URL", "https://datapi.jup.ag"),
     relayer: relayerConfig(env, problems),
+    profile: profileConfig(env, problems, count),
     auth: {
       supabaseUrl,
       issuer: `${supabaseUrl}/auth/v1`,
@@ -254,6 +271,69 @@ export function loadConfig(env: Env): Config {
   };
   if (problems.length > 0) throw new ConfigError(problems);
   return config;
+}
+
+/** The hard maximum the profile program allows any deployment. */
+const PROFILE_HARD_MAX_DATA_LEN = 4_096;
+
+/** The gate's keypair from the 64 bytes of its secret key written as a JSON array, or null. */
+function gateKeypair(value: string): Keypair | null {
+  try {
+    const bytes = z.array(z.number().int().min(0).max(255)).length(64).parse(JSON.parse(value));
+    // Refuses a secret whose two halves are not one key's.
+    return Keypair.fromSecretKey(Uint8Array.from(bytes));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The profile program on its private rollup, or null when this deployment
+ * keeps no profiles: with any of `PROFILE_ROLLUP_URL`, `PROFILE_PROGRAM_ID`
+ * and `PROFILE_GATE_SECRET_KEY` unset the feature is off, the wallets are
+ * told so, and they work exactly as they do without it.
+ *
+ * With all three set, each must be right or the start is refused: the gate
+ * key signs as fee payer, so a deploy must not come up holding half of one.
+ * A problem names the variable and never its value.
+ */
+function profileConfig(
+  env: Env,
+  problems: string[],
+  count: (name: string, fallback: number, max: number) => number,
+): ProfileConfig | null {
+  const read = (name: string) => env[name]?.trim() ?? "";
+  const rollup = read("PROFILE_ROLLUP_URL");
+  const programId = read("PROFILE_PROGRAM_ID");
+  const secret = read("PROFILE_GATE_SECRET_KEY");
+  if (!rollup || !programId || !secret) return null;
+
+  const before = problems.length;
+  const rollupUrl = httpUrl.safeParse(rollup);
+  // A read token is appended as the query, and travels with every call.
+  if (!rollupUrl.success || new URL(rollupUrl.data).search !== "") {
+    problems.push("PROFILE_ROLLUP_URL must be an http(s) URL with no query string.");
+  } else if (!rollupUrl.data.startsWith("https://") && !isLocal(rollupUrl.data)) {
+    problems.push("PROFILE_ROLLUP_URL must use https: read tokens and transactions travel to it.");
+  }
+  if (!isAddress(programId)) problems.push("PROFILE_PROGRAM_ID must be a Solana address.");
+  const gate = gateKeypair(secret);
+  if (!gate) {
+    problems.push(
+      "PROFILE_GATE_SECRET_KEY must be the gate's 64-byte secret key, as a JSON array of bytes.",
+    );
+  }
+  const maxDataLen = count("PROFILE_MAX_DATA_LEN", 2_048, PROFILE_HARD_MAX_DATA_LEN);
+  const dailyCreateCap = count("PROFILE_DAILY_CREATE_CAP", 500, 1_000_000);
+  if (problems.length > before || !rollupUrl.success || !gate) return null;
+  return {
+    rollupUrl: rollupUrl.data,
+    programId,
+    gate: gate.publicKey.toBase58(),
+    gateSecretKey: gate.secretKey,
+    maxDataLen,
+    dailyCreateCap,
+  };
 }
 
 /**

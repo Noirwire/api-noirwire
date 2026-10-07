@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { ERRORS } from "../../src/common/core/answer.js";
+import { PROFILE_CONFLICTS } from "../../src/profile/core/profiles.js";
 import { sharedSecretToken, signingKey, sessionToken } from "../support/tokens.js";
 import {
   ALLOWED_ORIGIN,
@@ -22,6 +23,12 @@ const SESSION_ROUTES: [method: string, path: string, body?: unknown][] = [
   ["POST", "/v1/private-payments/v1/spl/transfer", {}],
   ["GET", "/v1/relayer"],
   ["POST", "/v1/relayer", { method: "getPayerSigner" }],
+  ["GET", "/v1/profile/config"],
+  ["POST", "/v1/profile/challenge", { owner: ADDRESS }],
+  ["POST", "/v1/profile/session", { owner: ADDRESS, challenge: "c", signature: "s" }],
+  ["POST", "/v1/profile/read", { owner: ADDRESS, token: "t" }],
+  ["POST", "/v1/profile/blockhash", { token: "t" }],
+  ["POST", "/v1/profile/submit", { token: "t", transaction: "AQID" }],
   ["GET", "/v1/prices"],
   ["GET", "/v1/history/NVDAx/1D"],
   ["POST", "/v1/events", { path: "/" }],
@@ -103,8 +110,12 @@ describe("every response", () => {
   });
 
   it("gives every code exactly one status, and a sentence", () => {
+    // The profile program's refusals are the one exception to the spelling:
+    // they are answered under the names the program itself gives them.
+    const programNames: readonly string[] = PROFILE_CONFLICTS;
     for (const [code, [status, sentence]] of Object.entries(ERRORS)) {
-      expect(code).toMatch(/^[a-z]+(_[a-z]+)*$/);
+      if (programNames.includes(code)) expect(status).toBe(409);
+      else expect(code).toMatch(/^[a-z]+(_[a-z]+)*$/);
       expect(status).toBeGreaterThanOrEqual(400);
       expect(sentence.endsWith(".")).toBe(true);
     }

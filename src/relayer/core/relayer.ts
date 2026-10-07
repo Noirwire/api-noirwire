@@ -1,6 +1,6 @@
 import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { Buffer } from "node:buffer";
-import { createHmac, createPublicKey, verify } from "node:crypto";
+import { createHmac } from "node:crypto";
 import { z } from "zod";
 import {
   answer,
@@ -21,6 +21,7 @@ import {
 } from "../../common/core/quota.js";
 import type { Relay } from "../../common/core/relay.js";
 import { base58, bytesEqual } from "../../chain/core/bytes.js";
+import { signedBy } from "../../chain/core/signatures.js";
 import type { RelayerConfig } from "../../config/core/config.js";
 import type { AccountRent } from "./accountRent.js";
 import { lamportsInUsdc, readRelayed, relayedCostLamports, relayerFeeCap } from "./relayed.js";
@@ -184,23 +185,6 @@ function decode(encoded: unknown): VersionedTransaction | null {
     return VersionedTransaction.deserialize(Buffer.from(text.data, "base64"));
   } catch {
     return null;
-  }
-}
-
-/** The fixed header of an ed25519 public key in the encoding Node's verifier reads. */
-const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
-
-/** Whether `signature` is `signer`'s over `message`. */
-function signedBy(signer: PublicKey, message: Uint8Array, signature: Uint8Array): boolean {
-  try {
-    const key = createPublicKey({
-      key: Buffer.concat([ED25519_SPKI_PREFIX, signer.toBytes()]),
-      format: "der",
-      type: "spki",
-    });
-    return verify(null, message, key, signature);
-  } catch {
-    return false;
   }
 }
 
