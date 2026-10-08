@@ -1,7 +1,7 @@
 import { Keypair } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 import { base58 } from "../../src/chain/core/bytes.js";
-import { readClaim, referralFee } from "../../src/rewards/core/claim.js";
+import { readClaim, referralFee, type ClaimTerms } from "../../src/rewards/core/claim.js";
 import {
   MAX_CLOCK_DRIFT_SECONDS,
   rewardsMessage,
@@ -153,18 +153,61 @@ describe("the signed messages", () => {
 describe("the fee of a claimed trade", () => {
   const portfolio = key();
   const inWeekTwo = (START + 2 * WEEK_MS + DAY_MS) / 1_000;
-  const terms = {
+  const terms: ClaimTerms = {
     portfolio,
     referralAccount: REFERRAL_ACCOUNT,
     usdcMint: USDC_MINT,
     seasonStartMs: START,
+    doubleHourStartMs: null,
     nowMs: START + 2 * WEEK_MS + 2 * DAY_MS,
   };
   const genuine = () => trade({ portfolio, blockTime: inWeekTwo, feeMicroUsdc: 61_000n });
   const fee = (transaction = genuine()) => referralFee(transaction, REFERRAL_ACCOUNT, USDC_MINT);
 
   it("is what the referral account's USDC account gained, and is credited to the trade's week", () => {
-    expect(readClaim(genuine(), terms)).toEqual({ ok: true, week: 2, feeMicroUsdc: 61_000n });
+    expect(readClaim(genuine(), terms)).toEqual({
+      ok: true,
+      week: 2,
+      feeMicroUsdc: 61_000n,
+      countedMicroUsdc: 61_000n,
+    });
+  });
+
+  describe("in the double hour", () => {
+    const hourStartMs = START + 2 * WEEK_MS + 5 * DAY_MS + 18 * 3_600_000;
+    const during: ClaimTerms = {
+      ...terms,
+      doubleHourStartMs: hourStartMs,
+      nowMs: hourStartMs + DAY_MS,
+    };
+    /** What a trade made `seconds` after the hour began is credited with. */
+    const madeAt = (seconds: number, inForce = during) =>
+      readClaim(
+        trade({ portfolio, blockTime: hourStartMs / 1_000 + seconds, feeMicroUsdc: 61_000n }),
+        inForce,
+      );
+    const twice = { ok: true, week: 2, feeMicroUsdc: 61_000n, countedMicroUsdc: 122_000n };
+    const once = { ...twice, countedMicroUsdc: 61_000n };
+
+    it("counts twice from the second the hour begins", () => {
+      expect(madeAt(0)).toEqual(twice);
+    });
+
+    it("counts twice in its last second", () => {
+      expect(madeAt(59 * 60 + 59)).toEqual(twice);
+    });
+
+    it("counts once a second before it begins", () => {
+      expect(madeAt(-1)).toEqual(once);
+    });
+
+    it("counts once at the very moment it ends", () => {
+      expect(madeAt(60 * 60)).toEqual(once);
+    });
+
+    it("counts once at that same hour where no double hour is set", () => {
+      expect(madeAt(0, { ...during, doubleHourStartMs: null })).toEqual(once);
+    });
   });
 
   it("counts an account the transaction itself opened from zero", () => {

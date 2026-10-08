@@ -11,11 +11,11 @@ import {
 import type { Log } from "../../common/core/log.js";
 import { PROVIDER_RETRY_AFTER_SECONDS } from "../../common/core/providerGate.js";
 import type { Caller, RouteLimits } from "../../common/core/quota.js";
-import { readClaim } from "./claim.js";
+import { DOUBLE_HOUR_MS, readClaim } from "./claim.js";
 import { REWARDS_ROUTE } from "./database.js";
 import { rewardsMessage, signatureVerifies, timely } from "./messages.js";
 import { boostWeeksLeft, shareBps, WEEKLY_POINTS } from "./points.js";
-import type { MemberState, RewardsStorage } from "./storage.js";
+import type { MemberState, RewardsStorage, Totals } from "./storage.js";
 import type { Transactions } from "./transactions.js";
 import { closedWeeks, SEASON_WEEKS, seasonWeekAt, weekAt, weekEndsAt } from "./weeks.js";
 
@@ -55,8 +55,8 @@ export const CLAIM_LIMITS: RouteLimits = { perSession: 12, perIp: 120, total: 24
 export const CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 export const CODE_LENGTH = 8;
 const DAY_MS = 24 * 3_600_000;
-/** How long one count of the week's traders is answered with. */
-export const TRADERS_TTL_MS = 60_000;
+/** How long one read of the members and the week's traders is answered with. */
+export const TOTALS_TTL_MS = 60_000;
 /** How many codes are tried for a new member before giving up: two members drawing one code is already a rare thing. */
 const CODE_ATTEMPTS = 3;
 
@@ -107,6 +107,8 @@ export type RewardsUpstream = {
   seasonStartMs: number;
   /** The most new members one UTC day may have, whoever asks. A member who joins again is not counted. */
   dailyJoinCap: number;
+  /** When the hour in which a trade's fee counts twice begins, or null when there is none. */
+  doubleHourStartMs: number | null;
   referralAccount: string;
   usdcMint: string;
   fingerprintSecret: string;
@@ -121,7 +123,7 @@ export type RewardsDeps = {
 };
 
 export type Rewards = {
-  /** Whether points are handed out here, the season's shape, and how many members traded this week. */
+  /** Whether points are handed out here, the season's shape, and how many members there are and traded this week. */
   config(): Promise<Answer>;
   join(body: string): Promise<Answer>;
   state(body: string): Promise<Answer>;
@@ -167,6 +169,7 @@ export function createRewards(deps: RewardsDeps): Rewards {
       code: member.code,
       codeActive: member.codeActive,
       invited: member.invited,
+      memberNumber: member.memberNumber,
       wasInvited: member.wasInvited,
       // Outside the season the weeks are still counted from where the clock is, never from before week 0.
       boostWeeksLeft: boostWeeksLeft(
@@ -212,24 +215,46 @@ export function createRewards(deps: RewardsDeps): Rewards {
       : failed("signature_invalid");
   }
 
-  /** The last count of the running week's traders, and when and for which week it was asked for. */
-  let counted: { week: number; at: number; traders: Promise<number | null> } | null = null;
+  /** The last read of the two counts, and when and for which week it was asked for. */
+  let counted: { week: number | null; at: number; totals: Promise<Totals | null> } | null = null;
 
   /**
-   * How many members have a fee credited in the running week, or null
-   * outside the season. Every wallet asks, joined or not, so the database is
-   * asked once a minute at most and everyone in between is told the same.
-   * When the database gives no answer the count is null, for that minute
-   * too: whether rewards are on never depends on the database being up.
+   * How many members there are, and how many have a fee credited in the
+   * running week. Every wallet asks, joined or not, so the database is asked
+   * once a minute at most, for both at once, and everyone in between is told
+   * the same. When the database gives no answer there are no counts, for
+   * that minute too: whether rewards are on never depends on the database
+   * being up.
    */
-  function tradersThisWeek({ storage, seasonStartMs }: RewardsUpstream): Promise<number | null> {
+  function totals({ storage, seasonStartMs }: RewardsUpstream): Promise<Totals | null> {
     const week = seasonWeekAt(seasonStartMs, now());
-    if (week === null) return Promise.resolve(null);
-    if (counted?.week !== week || now() - counted.at >= TRADERS_TTL_MS) {
-      const traders = storage.traders(week).then((read) => ("failed" in read ? null : read.value));
-      counted = { week, at: now(), traders };
+    if (counted?.week !== week || now() - counted.at >= TOTALS_TTL_MS) {
+      const read = storage.totals(week).then((read) => ("failed" in read ? null : read.value));
+      counted = { week, at: now(), totals: read };
     }
-    return counted.traders;
+    return counted.totals;
+  }
+
+  /** The season as every wallet is told it. Joining is open before the season starts and after it ends, so the members are counted then too. */
+  async function season(configured: RewardsUpstream) {
+    const { seasonStartMs, doubleHourStartMs } = configured;
+    const counts = await totals(configured);
+    return {
+      enabled: true,
+      seasonStart: new Date(seasonStartMs).toISOString(),
+      seasonWeeks: SEASON_WEEKS,
+      weeklyPoints: WEEKLY_POINTS,
+      members: counts?.members ?? null,
+      tradersThisWeek:
+        counts && seasonWeekAt(seasonStartMs, now()) !== null ? counts.weekTraders : null,
+      doubleHour:
+        doubleHourStartMs === null
+          ? null
+          : {
+              startsAt: new Date(doubleHourStartMs).toISOString(),
+              endsAt: new Date(doubleHourStartMs + DOUBLE_HOUR_MS).toISOString(),
+            },
+    };
   }
 
   return {
@@ -237,19 +262,15 @@ export function createRewards(deps: RewardsDeps): Rewards {
       return answer(
         200,
         upstream
-          ? {
-              enabled: true,
-              seasonStart: new Date(upstream.seasonStartMs).toISOString(),
-              seasonWeeks: SEASON_WEEKS,
-              weeklyPoints: WEEKLY_POINTS,
-              tradersThisWeek: await tradersThisWeek(upstream),
-            }
+          ? await season(upstream)
           : {
               enabled: false,
               seasonStart: null,
               seasonWeeks: null,
               weeklyPoints: null,
+              members: null,
               tradersThisWeek: null,
+              doubleHour: null,
             },
       );
     },
@@ -324,6 +345,7 @@ export function createRewards(deps: RewardsDeps): Rewards {
         referralAccount: upstream.referralAccount,
         usdcMint: upstream.usdcMint,
         seasonStartMs: upstream.seasonStartMs,
+        doubleHourStartMs: upstream.doubleHourStartMs,
         nowMs: now(),
       });
       if (!claim.ok) return failed(claim.code);
@@ -335,6 +357,7 @@ export function createRewards(deps: RewardsDeps): Rewards {
           .digest("hex"),
         week: claim.week,
         feeMicroUsdc: claim.feeMicroUsdc,
+        countedMicroUsdc: claim.countedMicroUsdc,
       });
       if ("failed" in credited) return credited.failed;
       if (credited.value === "duplicate") return failed("already_claimed");

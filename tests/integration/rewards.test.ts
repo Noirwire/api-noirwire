@@ -64,6 +64,7 @@ function database(store: MemoryRewards) {
         invited: member.invited,
         was_invited: member.wasInvited,
         joined_week: member.joinedWeek,
+        member_number: member.memberNumber,
         points: member.points.toString(),
         week_fee_micro_usdc: member.weekFeeMicroUsdc.toString(),
         week_score: member.weekScore.toString(),
@@ -78,12 +79,14 @@ function database(store: MemoryRewards) {
         fingerprint: args.p_fingerprint,
         week: args.p_week,
         feeMicroUsdc: BigInt(args.p_fee_micro_usdc),
+        countedMicroUsdc: BigInt(args.p_counted_micro_usdc),
       });
       return { body: JSON.stringify(value(credited)), headers: JSON_REPLY };
     }
-    if (name === "rewards_week_traders") {
-      const traders = value(await store.storage.traders(args.p_week));
-      return { body: JSON.stringify(traders), headers: JSON_REPLY };
+    if (name === "rewards_totals") {
+      const totals = value(await store.storage.totals(args.p_week));
+      const row = totals && { members: totals.members, week_traders: totals.weekTraders };
+      return { body: JSON.stringify(row), headers: JSON_REPLY };
     }
     if (name === "rewards_settle") {
       await store.storage.settle(args.p_weeks, args.p_weekly_points);
@@ -200,11 +203,13 @@ describe("the rewards routes", () => {
         seasonStart: new Date(SEASON_START_MS).toISOString(),
         seasonWeeks: 12,
         weeklyPoints: 100_000,
+        members: 1,
         tradersThisWeek: 1,
+        doubleHour: null,
       },
     ]);
     expect(api.providers.received.map((sent) => [sent.provider, sent.path, sent.body])).toEqual([
-      ["supabase", "/rest/v1/rpc/rewards_week_traders", '{"p_week":2}'],
+      ["supabase", "/rest/v1/rpc/rewards_totals", '{"p_week":2}'],
     ]);
     expect(JSON.stringify(api.providers.received)).not.toContain(token);
 
@@ -232,6 +237,7 @@ describe("the rewards routes", () => {
       code: expect.stringMatching(/^[2-9A-HJ-NP-Z]{8}$/),
       codeActive: false,
       invited: 0,
+      memberNumber: 1,
       wasInvited: false,
       boostWeeksLeft: 0,
       points: "0",
@@ -511,6 +517,75 @@ describe("a deployment that takes one new member a day", () => {
   });
 });
 
+describe("a deployment in its double hour", () => {
+  let api: Api;
+  const hourStartMs = Math.floor(Date.now() / 1_000) * 1_000 - 30 * 60_000;
+
+  beforeAll(async () => {
+    api = await startApi({
+      ...ENV,
+      REWARDS_DOUBLE_HOUR_START: new Date(hourStartMs).toISOString(),
+    });
+  });
+  afterAll(() => api.close());
+
+  it("states the hour, credits a trade made in it twice toward the score, and answers the fee really paid", async () => {
+    const store = memoryRewardsStorage();
+    const id = transactionId();
+    const member = Keypair.generate();
+    const portfolio = Keypair.generate();
+    const made = trade({ portfolio: keyOf(portfolio), blockTime: now(), feeMicroUsdc: 61_000n });
+    api.providers.answer("supabase", (request) =>
+      request.path.startsWith("/rest/")
+        ? database(store)(request)
+        : api.providers.defaults.supabase(request),
+    );
+    api.providers.answer("rpc", (request) => {
+      const call = JSON.parse(request.body) as { id: number; method: string };
+      return call.method === "getTransaction"
+        ? { body: { jsonrpc: "2.0", id: call.id, result: tradeOnTheWire(id, made) } }
+        : api.providers.defaults.rpc(request);
+    });
+
+    const config = await api.call("/v1/rewards/config");
+    expect(config.json.doubleHour).toEqual({
+      startsAt: new Date(hourStartMs).toISOString(),
+      endsAt: new Date(hourStartMs + 3_600_000).toISOString(),
+    });
+
+    const at = now();
+    await api.call("/v1/rewards/join", {
+      body: {
+        rewardsKey: keyOf(member),
+        at,
+        signature: signed(member, "join", keyOf(member), String(at), ""),
+      },
+    });
+    // The wallet sends nothing about the hour: the body is a claim like any other.
+    const claimed = await api.call("/v1/rewards/claims", {
+      body: {
+        rewardsKey: keyOf(member),
+        transaction: id,
+        portfolio: keyOf(portfolio),
+        portfolioSignature: signed(portfolio, "claim", keyOf(member), id),
+        rewardsSignature: signed(member, "claim", keyOf(member), id),
+      },
+    });
+    expect(claimed.json).toMatchObject({
+      credited: true,
+      feeMicroUsdc: "61000",
+      state: { week: { feeMicroUsdc: "61000" } },
+    });
+    const credit = api.providers
+      .sentTo("supabase")
+      .find((request) => request.path === "/rest/v1/rpc/rewards_credit");
+    expect(JSON.parse(credit?.body ?? "{}")).toMatchObject({
+      p_fee_micro_usdc: "61000",
+      p_counted_micro_usdc: "122000",
+    });
+  });
+});
+
 describe("a deployment whose database is down", () => {
   let api: Api;
 
@@ -528,7 +603,7 @@ describe("a deployment whose database is down", () => {
     const response = await api.call("/v1/rewards/config");
     expect(response.status).toBe(200);
     expect(response.json).toMatchObject({ enabled: true, weeklyPoints: 100_000 });
-    expect(response.json.tradersThisWeek).toBeNull();
+    expect([response.json.members, response.json.tradersThisWeek]).toEqual([null, null]);
     expect(response.text).not.toContain("upstream connect error");
   });
 });
@@ -551,7 +626,9 @@ describe("a deployment with no rewards configuration", () => {
         seasonStart: null,
         seasonWeeks: null,
         weeklyPoints: null,
+        members: null,
         tradersThisWeek: null,
+        doubleHour: null,
       },
     ]);
 

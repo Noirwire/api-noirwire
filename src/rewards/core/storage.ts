@@ -43,11 +43,13 @@ export type MemberState = {
   wasInvited: boolean;
   /** The week the member joined in, counted from the season start. */
   joinedWeek: number;
+  /** The member's place in the order of joining, from 1. */
+  memberNumber: number;
   /** Settled points. */
   points: bigint;
-  /** The member's fees in the week asked about, in micro-USDC. */
+  /** What the member's trades of the week asked about really paid, in micro-USDC. */
   weekFeeMicroUsdc: bigint;
-  /** The member's score in that week and every member's together, in the same unit as each other. */
+  /** The member's score in that week and every member's together, in the same unit as each other. Worked out from fees as they are counted. */
   weekScore: bigint;
   weekTotalScore: bigint;
   /** How many members have a fee credited in that week. */
@@ -59,7 +61,17 @@ export type Credit = {
   /** What the claimed transaction is remembered by. Never the transaction's own signature. */
   fingerprint: string;
   week: number;
+  /** What the trade paid. */
   feeMicroUsdc: bigint;
+  /** What it counts for toward the week's score: the fee, or twice the fee for a trade of the double hour. */
+  countedMicroUsdc: bigint;
+};
+
+/** The two counts every wallet is shown. Nothing of any member. */
+export type Totals = {
+  members: number;
+  /** How many members have a fee credited in the week asked about: none when it is null. */
+  weekTraders: number;
 };
 
 /**
@@ -72,10 +84,10 @@ export type RewardsStorage = {
   join(member: NewMember): Promise<Stored<Joined>>;
   /** A member as of `week` (null outside the season: no week's fees are read), or null when the key has not joined. */
   state(rewardsKey: string, week: number | null): Promise<Stored<MemberState | null>>;
-  /** Records the fingerprint and adds the fee to the member's week, or does neither. */
+  /** Records the fingerprint and adds the fee, as paid and as counted, to the member's week, or does neither. */
   credit(credit: Credit): Promise<Stored<Credited>>;
   /** Hands out `weeklyPoints` for each of the first `weeks` weeks that has not been settled. Settling twice changes nothing. */
   settle(weeks: number, weeklyPoints: number): Promise<Stored<null>>;
-  /** How many members have a fee credited in `week`: a count, and nothing of who. */
-  traders(week: number): Promise<Stored<number>>;
+  /** How many members there are, and how many have a fee credited in `week` (null outside the season), in one read. */
+  totals(week: number | null): Promise<Stored<Totals>>;
 };

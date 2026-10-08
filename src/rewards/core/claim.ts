@@ -55,15 +55,38 @@ export type ClaimRefusal =
   "transaction_failed" | "not_a_signer" | "no_referral_fee" | "outside_claim_window";
 
 export type ClaimReading =
-  { ok: true; week: number; feeMicroUsdc: bigint } | { ok: false; code: ClaimRefusal };
+  | {
+      ok: true;
+      week: number;
+      /** What the trade paid. */
+      feeMicroUsdc: bigint;
+      /** What it counts for toward the week's score. */
+      countedMicroUsdc: bigint;
+    }
+  | { ok: false; code: ClaimRefusal };
 
 export type ClaimTerms = {
   portfolio: string;
   referralAccount: string;
   usdcMint: string;
   seasonStartMs: number;
+  /** When the double hour begins, or null when this deployment has none. */
+  doubleHourStartMs: number | null;
   nowMs: number;
 };
+
+export const DOUBLE_HOUR_MS = 3_600_000;
+
+/**
+ * Whether a trade was made in the double hour: from its start, and up to
+ * but not at the hour after. Decided by the block the chain put the trade
+ * in, so nothing a caller sends, and no clock of theirs, has a say.
+ */
+export function inDoubleHour(blockTime: number, doubleHourStartMs: number | null): boolean {
+  if (doubleHourStartMs === null) return false;
+  const madeAt = blockTime * 1_000;
+  return madeAt >= doubleHourStartMs && madeAt < doubleHourStartMs + DOUBLE_HOUR_MS;
+}
 
 /** The week and the fee a transaction is credited with, or why it is not. */
 export function readClaim(transaction: ChainTransaction, terms: ClaimTerms): ClaimReading {
@@ -75,5 +98,6 @@ export function readClaim(transaction: ChainTransaction, terms: ClaimTerms): Cla
   if (week === null || !claimOpen(terms.seasonStartMs, week, terms.nowMs)) {
     return { ok: false, code: "outside_claim_window" };
   }
-  return { ok: true, week, feeMicroUsdc };
+  const doubled = inDoubleHour(transaction.blockTime, terms.doubleHourStartMs);
+  return { ok: true, week, feeMicroUsdc, countedMicroUsdc: feeMicroUsdc * (doubled ? 2n : 1n) };
 }

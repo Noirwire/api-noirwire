@@ -7,7 +7,7 @@ import type { ChainTransaction } from "../../src/rewards/core/claim.js";
 import {
   CODE_ALPHABET,
   createRewards,
-  TRADERS_TTL_MS,
+  TOTALS_TTL_MS,
   type Rewards,
 } from "../../src/rewards/core/rewards.js";
 import {
@@ -40,10 +40,12 @@ let looked: string[];
 let allowed: boolean;
 let codes: string[];
 let settleCalls: number;
-let traderCalls: number;
+let totalsCalls: number;
 let databaseDown: Answer | null;
 
-function rewards(options: { off?: boolean; dailyJoinCap?: number } = {}): Rewards {
+type Deployment = { off?: boolean; dailyJoinCap?: number; doubleHourStartMs?: number };
+
+function rewards(options: Deployment = {}): Rewards {
   return createRewards({
     upstream: options.off
       ? null
@@ -60,11 +62,11 @@ function rewards(options: { off?: boolean; dailyJoinCap?: number } = {}): Reward
               settleCalls += 1;
               return store.storage.settle(weeks, weeklyPoints);
             },
-            traders: (week) => {
-              traderCalls += 1;
+            totals: (week) => {
+              totalsCalls += 1;
               return databaseDown
                 ? Promise.resolve({ failed: databaseDown })
-                : store.storage.traders(week);
+                : store.storage.totals(week);
             },
           },
           transactions: {
@@ -76,6 +78,7 @@ function rewards(options: { off?: boolean; dailyJoinCap?: number } = {}): Reward
           rpcAllowance: () => Promise.resolve(allowed),
           seasonStartMs: SEASON_START_MS,
           dailyJoinCap: options.dailyJoinCap ?? 2_000,
+          doubleHourStartMs: options.doubleHourStartMs ?? null,
           referralAccount: REFERRAL_ACCOUNT,
           usdcMint: USDC_MINT,
           fingerprintSecret: FINGERPRINT_SECRET,
@@ -179,7 +182,7 @@ beforeEach(() => {
   allowed = true;
   codes = [];
   settleCalls = 0;
-  traderCalls = 0;
+  totalsCalls = 0;
   databaseDown = null;
 });
 
@@ -191,7 +194,9 @@ describe("a deployment with no rewards", () => {
       seasonStart: null,
       seasonWeeks: null,
       weeklyPoints: null,
+      members: null,
       tradersThisWeek: null,
+      doubleHour: null,
     });
     const member = Keypair.generate();
     const portfolio = Keypair.generate();
@@ -213,7 +218,9 @@ describe("the season", () => {
       seasonStart: "2026-10-19T00:00:00.000Z",
       seasonWeeks: 12,
       weeklyPoints: 100_000,
+      members: 0,
       tradersThisWeek: 0,
+      doubleHour: null,
     });
   });
 });
@@ -238,13 +245,13 @@ describe("the count of this week's traders", () => {
     expect(read(await state(api, member)).week.traders).toBe(2);
   });
 
-  it("is null outside the season, and the database is not asked", async () => {
+  it("is null outside the season, while the members are still counted", async () => {
     const api = rewards();
+    await trader(api);
     for (const outside of [SEASON_START_MS - 1_000, SEASON_START_MS + 12 * WEEK_MS]) {
       clock = outside;
-      expect(await count(api)).toBeNull();
+      expect(read(await api.config())).toMatchObject({ tradersThisWeek: null, members: 1 });
     }
-    expect(traderCalls).toBe(0);
   });
 
   it("is read once and answered for 60 seconds, then read again", async () => {
@@ -253,13 +260,29 @@ describe("the count of this week's traders", () => {
     expect(await count(api)).toBe(1);
     await trader(api);
 
-    clock += TRADERS_TTL_MS - 1;
+    clock += TOTALS_TTL_MS - 1;
     expect(await count(api)).toBe(1);
-    expect(traderCalls).toBe(1);
+    expect(totalsCalls).toBe(1);
 
     clock += 1;
     expect(await count(api)).toBe(2);
-    expect(traderCalls).toBe(2);
+    expect(totalsCalls).toBe(2);
+  });
+
+  it("comes with the count of all members, traders or not, from the same one read", async () => {
+    const api = rewards();
+    await trader(api);
+    await join(api, Keypair.generate());
+    await join(api, Keypair.generate());
+    expect(read(await api.config())).toMatchObject({ members: 3, tradersThisWeek: 1 });
+    expect(totalsCalls).toBe(1);
+
+    // A member who joins inside the minute is counted when it is over, like a trader.
+    await join(api, Keypair.generate());
+    expect(read(await api.config()).members).toBe(3);
+    clock += TOTALS_TTL_MS;
+    expect(read(await api.config()).members).toBe(4);
+    expect(totalsCalls).toBe(2);
   });
 
   it("is not last week's count in a week that has just begun", async () => {
@@ -276,7 +299,72 @@ describe("the count of this week's traders", () => {
     databaseDown = refusal("upstream_timeout");
     const answered = await api.config();
     expect(answered.status).toBe(200);
-    expect(read(answered)).toMatchObject({ enabled: true, seasonWeeks: 12, tradersThisWeek: null });
+    expect(read(answered)).toMatchObject({
+      enabled: true,
+      seasonWeeks: 12,
+      members: null,
+      tradersThisWeek: null,
+    });
+  });
+});
+
+describe("a member's number", () => {
+  it("is 1, 2, 3 in the order of joining, and the same when a member joins again", async () => {
+    const api = rewards();
+    const members = [Keypair.generate(), Keypair.generate(), Keypair.generate()];
+    const numbers = [];
+    for (const member of members) numbers.push(read(await join(api, member)).memberNumber);
+    expect(numbers).toEqual([1, 2, 3]);
+    expect(read(await join(api, members[1])).memberNumber).toBe(2);
+    expect(read(await state(api, members[2])).memberNumber).toBe(3);
+  });
+});
+
+describe("the double hour", () => {
+  const hourStartMs = SEASON_START_MS + 2 * WEEK_MS + 3 * DAY_MS + 18 * 3_600_000;
+
+  it("is stated with its start and its end an hour later, in ISO 8601", async () => {
+    const stated = read(await rewards({ doubleHourStartMs: hourStartMs }).config()).doubleHour;
+    expect(stated).toEqual({
+      startsAt: "2026-11-05T18:00:00.000Z",
+      endsAt: "2026-11-05T19:00:00.000Z",
+    });
+  });
+
+  it("is null where none is set, and a trade made in that same hour counts once", async () => {
+    const api = rewards();
+    const member = Keypair.generate();
+    const portfolio = Keypair.generate();
+    await join(api, member);
+    clock = hourStartMs + 60_000;
+    await claim(api, member, portfolio, landed(portfolio, { fee: 61_000n }));
+    expect(read(await api.config()).doubleHour).toBeNull();
+    expect(store.stored()).not.toContain("122000");
+  });
+
+  it("counts a trade made in it twice toward the share, and shows the member the fee really paid", async () => {
+    const api = rewards({ doubleHourStartMs: hourStartMs });
+    const early = Keypair.generate();
+    const inTheHour = Keypair.generate();
+    const portfolios = [Keypair.generate(), Keypair.generate()];
+    await join(api, early);
+    await join(api, inTheHour);
+    clock = hourStartMs - 60_000;
+    await claim(api, early, portfolios[0], landed(portfolios[0], { fee: 61_000n }));
+    clock = hourStartMs + 60_000;
+    const credited = await claim(
+      api,
+      inTheHour,
+      portfolios[1],
+      landed(portfolios[1], { fee: 61_000n }),
+    );
+
+    // Both paid the same. The one who traded in the hour holds two thirds of the week.
+    expect(read(credited)).toMatchObject({
+      feeMicroUsdc: "61000",
+      state: { week: { feeMicroUsdc: "61000", shareBps: 6_666 } },
+    });
+    expect(read(await state(api, early)).week.shareBps).toBe(3_333);
   });
 });
 
@@ -290,6 +378,7 @@ describe("joining", () => {
     expect(rest).toEqual({
       codeActive: false,
       invited: 0,
+      memberNumber: 1,
       wasInvited: false,
       boostWeeksLeft: 0,
       points: "0",

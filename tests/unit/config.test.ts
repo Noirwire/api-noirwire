@@ -432,7 +432,29 @@ describe("the configuration", () => {
         seasonStartMs: Date.UTC(2026, 9, 19),
         referralAccount: rewards.REWARDS_REFERRAL_ACCOUNT,
         dailyJoinCap: 2_000,
+        doubleHourStartMs: null,
       });
+    });
+
+    it("take a double hour written with Z or with an offset, as the same moment", () => {
+      const at = (value: string) =>
+        loadConfig({ ...base, ...rewards, REWARDS_DOUBLE_HOUR_START: value }).rewards
+          ?.doubleHourStartMs;
+      expect(at("2026-11-07T18:00:00Z")).toBe(Date.UTC(2026, 10, 7, 18));
+      expect(at("2026-11-07T19:00:00+01:00")).toBe(Date.UTC(2026, 10, 7, 18));
+    });
+
+    it("refuse a double hour that does not say its offset, or is no date and time", () => {
+      for (const value of ["2026-11-07T18:00:00", "2026-11-07", "1794074400", "saturday at six"]) {
+        const refused = problems({ ...base, ...rewards, REWARDS_DOUBLE_HOUR_START: value });
+        expect(refused, value).toMatch(/REWARDS_DOUBLE_HOUR_START/);
+      }
+    });
+
+    it("are not switched on by a double hour alone, nor is the start refused for a malformed one", () => {
+      for (const value of ["2026-11-07T18:00:00Z", "saturday at six"]) {
+        expect(loadConfig({ ...base, REWARDS_DOUBLE_HOUR_START: value }).rewards, value).toBeNull();
+      }
     });
 
     it("take a cap on new members a day of at least one, which alone switches nothing on", () => {

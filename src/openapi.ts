@@ -100,7 +100,7 @@ const DESCRIPTION = [
   "",
   "## What this API logs and keeps",
   "",
-  "- **Stored:** nothing, for a wallet that has not joined rewards: no route but the rewards routes writes anywhere. For a member, where rewards are configured: the rewards key, its referral code, who invited it, the week and the UTC day it joined, its fee total per week, its points, and a keyed fingerprint of each claimed transaction. Never a portfolio, a transaction, a session id, an IP address or a time of day.",
+  "- **Stored:** nothing, for a wallet that has not joined rewards: no route but the rewards routes writes anywhere. For a member, where rewards are configured: the rewards key, its referral code, who invited it, the week and the UTC day it joined, its member number, its fee total per week as paid and as counted, its points, and a keyed fingerprint of each claimed transaction. Never a portfolio, a transaction, a session id, an IP address or a time of day.",
   "- **Logged:** one line per request with the route's pattern, the status code and the duration, plus, for a refusal or an upstream failure, one fixed word. Never a token, a session id, an address, a transaction, an IP address, a request body or a query string.",
   "- **Held in memory:** counters keyed by session id and by client address, each for one minute (one hour for the hourly budgets), then dropped. Cached public market data.",
   "- **This server does see** every request in transit, including its addresses and the caller's IP. That it keeps none of it is a property of this code, which is published so it can be read.",

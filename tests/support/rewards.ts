@@ -169,18 +169,22 @@ export function tradeOnTheWire(id: string, transaction: ChainTransaction) {
   };
 }
 
-type Member = Scorer & { code: string; joinedDay: number };
+type Member = Scorer & { code: string; joinedDay: number; memberNumber: number };
 
 /** The database, in memory. `stored()` is every value it holds, to look through for what must not be there. */
 export function memoryRewardsStorage() {
   const members = new Map<string, Member>();
+  /** By week and member: the fees as they were paid, and as they count toward the score. */
   const fees = new Map<number, Map<string, bigint>>();
+  const counted = new Map<number, Map<string, bigint>>();
   const fingerprints = new Set<string>();
   const points = new Map<number, Map<string, bigint>>();
   const settlements: number[] = [];
 
   const feesOf = (week: number | null) =>
     (week === null ? undefined : fees.get(week)) ?? new Map<string, bigint>();
+  const countedOf = (week: number | null) =>
+    (week === null ? undefined : counted.get(week)) ?? new Map<string, bigint>();
   const active = (rewardsKey: string) => [...fees.values()].some((week) => week.has(rewardsKey));
 
   const storage: RewardsStorage = {
@@ -203,6 +207,7 @@ export function memoryRewardsStorage() {
         invitedBy: inviter?.rewardsKey ?? null,
         joinedWeek,
         joinedDay,
+        memberNumber: members.size + 1,
       });
       return Promise.resolve({ value: "joined" });
     },
@@ -213,13 +218,14 @@ export function memoryRewardsStorage() {
       const scores =
         week === null
           ? new Map<string, bigint>()
-          : weeklyScores(week, [...members.values()], feesOf(week));
+          : weeklyScores(week, [...members.values()], countedOf(week));
       const state: MemberState = {
         code: member.code,
         codeActive: active(rewardsKey),
         invited: [...members.values()].filter((other) => other.invitedBy === rewardsKey).length,
         wasInvited: member.invitedBy !== null,
         joinedWeek: member.joinedWeek,
+        memberNumber: member.memberNumber,
         points: [...points.values()].reduce((sum, week) => sum + (week.get(rewardsKey) ?? 0n), 0n),
         weekFeeMicroUsdc: feesOf(week).get(rewardsKey) ?? 0n,
         weekScore: scores.get(rewardsKey) ?? 0n,
@@ -229,7 +235,7 @@ export function memoryRewardsStorage() {
       return Promise.resolve({ value: state });
     },
 
-    credit({ rewardsKey, fingerprint, week, feeMicroUsdc }) {
+    credit({ rewardsKey, fingerprint, week, feeMicroUsdc, countedMicroUsdc }) {
       if (!members.has(rewardsKey)) return Promise.resolve({ value: "not_member" });
       if (points.has(week)) return Promise.resolve({ value: "settled" });
       if (fingerprints.has(fingerprint)) return Promise.resolve({ value: "duplicate" });
@@ -237,6 +243,9 @@ export function memoryRewardsStorage() {
       const ofWeek = feesOf(week);
       ofWeek.set(rewardsKey, (ofWeek.get(rewardsKey) ?? 0n) + feeMicroUsdc);
       fees.set(week, ofWeek);
+      const countedOfWeek = countedOf(week);
+      countedOfWeek.set(rewardsKey, (countedOfWeek.get(rewardsKey) ?? 0n) + countedMicroUsdc);
+      counted.set(week, countedOfWeek);
       return Promise.resolve({ value: "credited" });
     },
 
@@ -244,13 +253,14 @@ export function memoryRewardsStorage() {
       for (let week = 0; week < weeks; week += 1) {
         if (points.has(week)) continue;
         settlements.push(week);
-        const scores = weeklyScores(week, [...members.values()], feesOf(week));
+        const scores = weeklyScores(week, [...members.values()], countedOf(week));
         points.set(week, splitPoints(scores, BigInt(weeklyPoints)));
       }
       return Promise.resolve({ value: null });
     },
 
-    traders: (week) => Promise.resolve({ value: feesOf(week).size }),
+    totals: (week) =>
+      Promise.resolve({ value: { members: members.size, weekTraders: feesOf(week).size } }),
   };
 
   return {
@@ -262,6 +272,7 @@ export function memoryRewardsStorage() {
       JSON.stringify({
         members: [...members.values()],
         fees: [...fees].map(([week, ofWeek]) => [week, [...ofWeek].map(String)]),
+        counted: [...counted].map(([week, ofWeek]) => [week, [...ofWeek].map(String)]),
         fingerprints: [...fingerprints],
         points: [...points].map(([week, ofWeek]) => [week, [...ofWeek].map(String)]),
       }),
