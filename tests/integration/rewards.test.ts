@@ -63,6 +63,7 @@ function database(store: MemoryRewards) {
         code_active: member.codeActive,
         invited: member.invited,
         was_invited: member.wasInvited,
+        joined_week: member.joinedWeek,
         points: member.points.toString(),
         week_fee_micro_usdc: member.weekFeeMicroUsdc.toString(),
         week_score: member.weekScore.toString(),
@@ -232,6 +233,7 @@ describe("the rewards routes", () => {
       codeActive: false,
       invited: 0,
       wasInvited: false,
+      boostWeeksLeft: 0,
       points: "0",
       week: {
         index: 2,
@@ -296,7 +298,11 @@ describe("the rewards routes", () => {
     expect((await state(inviter)).json.invited).toBe(0);
 
     const invited = await join(Keypair.generate(), { inviteCode: code });
-    expect([invited.status, invited.json.wasInvited]).toEqual([200, true]);
+    expect([invited.status, invited.json.wasInvited, invited.json.boostWeeksLeft]).toEqual([
+      200,
+      true,
+      8,
+    ]);
     expect((await state(inviter)).json.invited).toBe(1);
   });
 

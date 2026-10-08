@@ -291,6 +291,7 @@ describe("joining", () => {
       codeActive: false,
       invited: 0,
       wasInvited: false,
+      boostWeeksLeft: 0,
       points: "0",
       week: {
         index: 2,
@@ -446,6 +447,43 @@ describe("an invite code", () => {
       const again = await join(api, member, { inviteCode });
       expect([again.status, read(again).wasInvited], inviteCode).toEqual([200, false]);
     }
+  });
+});
+
+describe("the weeks of the bonus an invited member has left", () => {
+  const left = async (api: Rewards, member: Keypair) =>
+    read(await state(api, member)).boostWeeksLeft;
+
+  it("are all eight in the week they joined in, one in the eighth, and none after", async () => {
+    const api = rewards();
+    const { code } = await activeMember(api);
+    const invited = Keypair.generate();
+    expect(read(await join(api, invited, { inviteCode: code })).boostWeeksLeft).toBe(8);
+
+    clock += 7 * WEEK_MS;
+    expect(await left(api, invited)).toBe(1);
+    clock += WEEK_MS;
+    expect(await left(api, invited)).toBe(0);
+  });
+
+  it("are none for a member who joined without a code, their inviter included", async () => {
+    const api = rewards();
+    const { member: inviter, code } = await activeMember(api);
+    await join(api, Keypair.generate(), { inviteCode: code });
+    expect(await left(api, inviter)).toBe(0);
+  });
+
+  it("are still counted once the season is over, and never below zero", async () => {
+    const api = rewards();
+    const { code } = await activeMember(api);
+    const invited = Keypair.generate();
+    clock = SEASON_START_MS + 11 * WEEK_MS;
+    await join(api, invited, { inviteCode: code });
+
+    clock = SEASON_START_MS + 13 * WEEK_MS;
+    expect(read(await state(api, invited))).toMatchObject({ week: null, boostWeeksLeft: 6 });
+    clock = SEASON_START_MS + 40 * WEEK_MS;
+    expect(await left(api, invited)).toBe(0);
   });
 });
 

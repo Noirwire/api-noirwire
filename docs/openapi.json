@@ -5967,7 +5967,15 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["code", "codeActive", "invited", "wasInvited", "points", "week"],
+                  "required": [
+                    "code",
+                    "codeActive",
+                    "invited",
+                    "wasInvited",
+                    "boostWeeksLeft",
+                    "points",
+                    "week"
+                  ],
                   "properties": {
                     "code": {
                       "type": "string",
@@ -5984,6 +5992,10 @@
                     "wasInvited": {
                       "type": "boolean",
                       "description": "Whether the member joined with someone's code."
+                    },
+                    "boostWeeksLeft": {
+                      "type": "integer",
+                      "description": "For a member who joined with someone's code, how many weeks their own fees still count 1.1 times, the running week included: 8 in the week they joined in, 1 in the last such week, 0 after. Always 0 for a member who joined without a code. From 0 to 8. Before the season starts it is counted as of week 0."
                     },
                     "points": {
                       "type": "string",
@@ -6027,6 +6039,7 @@
                       "codeActive": true,
                       "invited": 2,
                       "wasInvited": false,
+                      "boostWeeksLeft": 0,
                       "points": "1250",
                       "week": {
                         "index": 3,
@@ -6435,7 +6448,15 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": ["code", "codeActive", "invited", "wasInvited", "points", "week"],
+                  "required": [
+                    "code",
+                    "codeActive",
+                    "invited",
+                    "wasInvited",
+                    "boostWeeksLeft",
+                    "points",
+                    "week"
+                  ],
                   "properties": {
                     "code": {
                       "type": "string",
@@ -6452,6 +6473,10 @@
                     "wasInvited": {
                       "type": "boolean",
                       "description": "Whether the member joined with someone's code."
+                    },
+                    "boostWeeksLeft": {
+                      "type": "integer",
+                      "description": "For a member who joined with someone's code, how many weeks their own fees still count 1.1 times, the running week included: 8 in the week they joined in, 1 in the last such week, 0 after. Always 0 for a member who joined without a code. From 0 to 8. Before the season starts it is counted as of week 0."
                     },
                     "points": {
                       "type": "string",
@@ -6495,6 +6520,7 @@
                       "codeActive": true,
                       "invited": 2,
                       "wasInvited": false,
+                      "boostWeeksLeft": 0,
                       "points": "1250",
                       "week": {
                         "index": 3,
@@ -6912,7 +6938,15 @@
                     },
                     "state": {
                       "type": "object",
-                      "required": ["code", "codeActive", "invited", "wasInvited", "points", "week"],
+                      "required": [
+                        "code",
+                        "codeActive",
+                        "invited",
+                        "wasInvited",
+                        "boostWeeksLeft",
+                        "points",
+                        "week"
+                      ],
                       "properties": {
                         "code": {
                           "type": "string",
@@ -6929,6 +6963,10 @@
                         "wasInvited": {
                           "type": "boolean",
                           "description": "Whether the member joined with someone's code."
+                        },
+                        "boostWeeksLeft": {
+                          "type": "integer",
+                          "description": "For a member who joined with someone's code, how many weeks their own fees still count 1.1 times, the running week included: 8 in the week they joined in, 1 in the last such week, 0 after. Always 0 for a member who joined without a code. From 0 to 8. Before the season starts it is counted as of week 0."
                         },
                         "points": {
                           "type": "string",
@@ -6978,6 +7016,7 @@
                         "codeActive": true,
                         "invited": 2,
                         "wasInvited": false,
+                        "boostWeeksLeft": 0,
                         "points": "1250",
                         "week": {
                           "index": 3,

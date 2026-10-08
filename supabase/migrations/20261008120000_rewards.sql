@@ -200,6 +200,7 @@ as $$
       select count(*) from public.rewards_members i where i.invited_by = m.rewards_key
     ),
     'was_invited', m.invited_by is not null,
+    'joined_week', m.joined_week,
     'points', (
       select coalesce(sum(p.points), 0)::text
       from public.rewards_points p

@@ -8,7 +8,7 @@ import {
   signatureVerifies,
   timely,
 } from "../../src/rewards/core/messages.js";
-import { shareBps } from "../../src/rewards/core/points.js";
+import { boostWeeksLeft, shareBps } from "../../src/rewards/core/points.js";
 import {
   claimOpen,
   closedWeeks,
@@ -79,6 +79,16 @@ describe("a member's share of the running week", () => {
     expect(shareBps(1n, 3n)).toBe(3_333);
     expect(shareBps(5n, 5n)).toBe(10_000);
     expect(shareBps(0n, 0n)).toBe(0);
+  });
+});
+
+describe("the weeks of the bonus left", () => {
+  it("are never more than eight, for a week counted from before the member joined", () => {
+    expect(boostWeeksLeft(true, 5, 0)).toBe(8);
+  });
+
+  it("are fewer from the start for a member who joined before week 0", () => {
+    expect(boostWeeksLeft(true, -3, 0)).toBe(5);
   });
 });
 
