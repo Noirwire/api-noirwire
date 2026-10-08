@@ -1,6 +1,6 @@
 # Architecture
 
-One NestJS service, no database. A wallet calls it; it calls a provider; the answer goes back. What it adds on the way is the reason it exists: an allow-list, a size cap, a rate limit, and, for the fee relayer, a full check of the transaction.
+One NestJS service. A wallet calls it; it calls a provider; the answer goes back. It keeps nothing of its own but the optional rewards ledger, which lives in the Supabase project's database. What it adds on the way is the reason it exists: an allow-list, a size cap, a rate limit, and, for the fee relayer, a full check of the transaction.
 
 ```
  web wallet (through the web app's own origin)  ─┐
@@ -10,7 +10,8 @@ One NestJS service, no database. A wallet calls it; it calls a provider; the ans
                                                           │          ├─>  MagicBlock's private rollup (profiles)
                                                           │          ├─>  NoirWire's fee relayer (Kora), private network only
                                                           │          ├─>  NoirWire's analytics server (Umami)
-                                                          └──────────┴─>  Supabase Auth (anonymous sessions)
+                                                          │          ├─>  Supabase Auth (anonymous sessions)
+                                                          └──────────┴─>  Supabase Postgres (the rewards ledger)
 ```
 
 ## A request, step by step
@@ -41,18 +42,23 @@ Each module has a `core/` folder of plain functions and a thin controller. `core
 | `src/private-payments`  | The path allow-list                                                                                                                                                                                                                                                                              |
 | `src/relayer/core`      | `relayed.ts` (the template), `relayer.ts` (the route's rules), `solPrice.ts` (Pyth), `accountRent.ts` (rent of the real account)                                                                                                                                                                 |
 | `src/profile/core`      | `wire.ts` (a transaction read from its bytes, of any size the rollup takes), `transaction.ts` (the three profile transactions, and the gate's signature), `program.ts` (the program's accounts and errors), `rollup.ts` (the calls to the rollup), `profiles.ts` (the routes' rules and budgets) |
+| `src/rewards/core`      | `weeks.ts` (the calendar), `points.ts` (the pot, a week's share), `messages.ts` (what a member signs), `claim.ts` (a trade's fee, from the chain's record), `transactions.ts` (that read), `storage.ts` and `database.ts` (the ledger, by SQL functions), `rewards.ts` (the routes' rules)       |
 | `src/prices`, `history` | The sources and their caches                                                                                                                                                                                                                                                                     |
 | `src/events/core`       | The closed event list and what is forwarded                                                                                                                                                                                                                                                      |
 | `src/chain/core`        | The network's USDC mint, the listed trackers, the two chain reads the server makes for itself, ed25519 signing and verifying                                                                                                                                                                     |
 
 ## State
 
-All of it is in memory, in one process:
+All of it is in memory, in one process, but for the rewards ledger:
 
 - **Counters.** Every rate limit and budget goes through one interface, `QuotaStore` (`src/common/core/quota.ts`). The implementation keeps fixed windows keyed by session id or client address for a minute (an hour for the hourly budgets). It fails closed: when a table is full of live windows, a newcomer is refused. This is why the service runs as **one replica**. A shared store would implement the same interface.
 - **Caches.** Live prices (30 seconds), price series (5 minutes to 6 hours), the SOL price (30 seconds), the rent of a token account per mint (5 minutes), the token keys (10 minutes, and re-read when a token names an unknown key).
 
 Nothing is written to disk. A restart forgets everything, which costs one read of each source.
+
+**The rewards ledger** is the exception, and only where rewards are configured. It lives in the Postgres of the Supabase project at `SUPABASE_URL`, in the tables of `supabase/migrations`, which have row level security on and no policy. This server reaches it over the project's REST interface with the secret key, and only by calling SQL functions (`src/rewards/core/database.ts`): joining, reading a member, crediting a claim and settling a week are each one function and one atomic step, so two requests at once, or two replicas, cannot credit a trade twice or settle a week twice. Which weeks this process has already seen settled is remembered in memory, to save the database a call per request; forgetting it costs one call that changes nothing.
+
+The scoring rules live in SQL alone (`rewards_scores` and `rewards_settle`), and so do the cap on new members a day and the rule that a trade is credited once. The integration suite loads the migration into a Postgres that runs inside the test process and calls the functions through the application's own adapter. The tests' in-memory stand-in for the ledger (`tests/support/rewards.ts`) scores by a copy of the rules, and one test runs both over the same members and fees and fails when they differ.
 
 ## Shared with the wallets
 

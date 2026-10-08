@@ -1,6 +1,6 @@
 # Deploying on Railway
 
-One Railway service, `api`, in the relayer's Railway project. Everything except six values (and the profile values, when profiles are kept) is code: `.railway/railway.ts` (builder, health check, restart policy, one replica, the relayer's values by reference) and the defaults in `src/config/core/config.ts`.
+One Railway service, `api`, in the relayer's Railway project. Everything except six values (and the profile and rewards values, when those are on) is code: `.railway/railway.ts` (builder, health check, restart policy, one replica, the relayer's values by reference) and the defaults in `src/config/core/config.ts`.
 
 ## Before you start
 
@@ -37,6 +37,22 @@ PROFILE_DAILY_CREATE_CAP=<the most profile creations signed in 24 hours; 500 whe
 ```
 
 The gate's public key must be the one the program's sponsor names as its gate. Keep the secret in Railway only, and seal the variable. The key holds no SOL and needs none; what it guards is the sponsor's rent, so `PROFILE_DAILY_CREATE_CAP` bounds what a day can cost.
+
+## Rewards (optional)
+
+Rewards are off until the first four of these are set in the same Raw Editor (the last has a default); with any of them missing `GET /v1/rewards/config` answers `enabled: false` and the wallets show nothing of rewards.
+
+```
+REWARDS_DATABASE_SECRET_KEY=<the secret key of the Supabase project at SUPABASE_URL>
+REWARDS_FINGERPRINT_SECRET=<openssl rand -hex 32>
+REWARDS_SEASON_START=<the season's first day: a Monday, 00:00 UTC, such as 2026-10-19>
+REWARDS_REFERRAL_ACCOUNT=<NoirWire's Jupiter referral account>
+REWARDS_DAILY_JOIN_CAP=<the most new members on one UTC day; 2000 when unset>
+```
+
+Before setting them, apply `supabase/migrations` to that project (`npx supabase link`, then `npx supabase db push`): it creates the rewards tables and the SQL functions this server calls. The tables have row level security on and no policy, so only the secret key reaches them. Keep both secrets in Railway only, and seal the variables.
+
+Set `REWARDS_FINGERPRINT_SECRET` and `REWARDS_SEASON_START` once. A new fingerprint secret lets every trade already claimed be claimed again, and a new season start moves the weeks under fees already credited.
 
 ## Check it
 

@@ -1,6 +1,7 @@
-# The local identity provider for this API: Supabase Auth, issuing the
-# anonymous sessions the API hands out. Nothing else of Supabase is used:
-# there is no schema, no table and no storage.
+# The local Supabase stack for this API: Supabase Auth, issuing the
+# anonymous sessions the API hands out, and the database with the rewards
+# tables (`migrations/`), which the API reaches over the REST interface with
+# the secret key and only through SQL functions. No storage is used.
 #
 # Every port is moved off the Supabase defaults (543xx) so that this stack
 # can run next to another local Supabase project.

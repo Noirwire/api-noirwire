@@ -43,6 +43,7 @@ describe("the OpenAPI document", () => {
       "GET /v1/prices",
       "GET /v1/profile/config",
       "GET /v1/relayer",
+      "GET /v1/rewards/config",
       "POST /v1/events",
       "POST /v1/jupiter/{path}",
       "POST /v1/private-payments/{path}",
@@ -52,6 +53,9 @@ describe("the OpenAPI document", () => {
       "POST /v1/profile/session",
       "POST /v1/profile/submit",
       "POST /v1/relayer",
+      "POST /v1/rewards/claims",
+      "POST /v1/rewards/join",
+      "POST /v1/rewards/state",
       "POST /v1/rpc",
       "POST /v1/session",
       "POST /v1/session/refresh",
@@ -184,6 +188,17 @@ describe("the OpenAPI document", () => {
     ]);
     expect(codesOf("POST /v1/profile/submit", "422")).toEqual(["refused"]);
     expect(codesOf("POST /v1/profile/read", "404")).toEqual(["not_found"]);
+    // A wallet reads any 422 on a join as "this invite code is not valid".
+    expect(codesOf("POST /v1/rewards/join", "422")).toEqual(["invite_code_invalid"]);
+    expect(codesOf("POST /v1/rewards/claims", "404")).toEqual(["not_a_member", "not_found"]);
+    expect(codesOf("POST /v1/rewards/claims", "409")).toEqual(["already_claimed"]);
+    expect(codesOf("POST /v1/rewards/claims", "422")).toEqual([
+      "transaction_not_finalized",
+      "transaction_failed",
+      "not_a_signer",
+      "no_referral_fee",
+      "outside_claim_window",
+    ]);
     expect(codesOf("GET /v1/history/{symbol}/{range}", "404")).toEqual(["not_found"]);
     expect(codesOf("GET /v1/prices", "400")).toEqual(["invalid_request"]);
     expect(codesOf("POST /v1/session/refresh", "401")).toEqual([

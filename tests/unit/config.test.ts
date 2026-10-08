@@ -41,6 +41,7 @@ describe("the configuration", () => {
       priceHistoryUrl: "https://datapi.jup.ag",
       relayer: null,
       profile: null,
+      rewards: null,
       auth: {
         supabaseUrl: "https://project.supabase.co",
         issuer: "https://project.supabase.co/auth/v1",
@@ -412,6 +413,70 @@ describe("the configuration", () => {
       );
       expect(problems({ ...base, ...profile, PROFILE_DAILY_CREATE_CAP: "0" })).toMatch(
         /PROFILE_DAILY_CREATE_CAP/,
+      );
+    });
+  });
+
+  describe("rewards", () => {
+    const rewards = {
+      REWARDS_DATABASE_SECRET_KEY: "the-database-secret-key",
+      REWARDS_FINGERPRINT_SECRET: "a-fingerprint-secret-of-32-chars!",
+      REWARDS_SEASON_START: "2026-10-19T00:00:00Z",
+      REWARDS_REFERRAL_ACCOUNT: address(),
+    };
+
+    it("are on with the database key, the fingerprint secret, the season start and the referral account set", () => {
+      expect(loadConfig({ ...base, ...rewards }).rewards).toEqual({
+        databaseSecretKey: rewards.REWARDS_DATABASE_SECRET_KEY,
+        fingerprintSecret: rewards.REWARDS_FINGERPRINT_SECRET,
+        seasonStartMs: Date.UTC(2026, 9, 19),
+        referralAccount: rewards.REWARDS_REFERRAL_ACCOUNT,
+        dailyJoinCap: 2_000,
+      });
+    });
+
+    it("take a cap on new members a day of at least one, which alone switches nothing on", () => {
+      const capped = { ...base, ...rewards, REWARDS_DAILY_JOIN_CAP: "50" };
+      expect(loadConfig(capped).rewards?.dailyJoinCap).toBe(50);
+      for (const value of ["0", "-1", "many", "1.5"]) {
+        expect(problems({ ...capped, REWARDS_DAILY_JOIN_CAP: value }), value).toMatch(
+          /REWARDS_DAILY_JOIN_CAP/,
+        );
+      }
+      expect(loadConfig({ ...base, REWARDS_DAILY_JOIN_CAP: "50" }).rewards).toBeNull();
+    });
+
+    it("are off, and the start is not refused, with any one of the four unset", () => {
+      for (const name of Object.keys(rewards)) {
+        expect(loadConfig({ ...base, ...rewards, [name]: " " }).rewards, name).toBeNull();
+      }
+    });
+
+    it("refuse a fingerprint secret under 32 characters, without repeating it", () => {
+      const short = "only-thirty-one-characters-long";
+      const refused = problems({ ...base, ...rewards, REWARDS_FINGERPRINT_SECRET: short });
+      expect(refused).toMatch(/REWARDS_FINGERPRINT_SECRET/);
+      expect(refused).not.toContain(short);
+    });
+
+    it("take a season start written as a date alone, and refuse one that is not a Monday at 00:00 UTC", () => {
+      const start = (value: string) => ({ ...base, ...rewards, REWARDS_SEASON_START: value });
+      expect(loadConfig(start("2026-10-19")).rewards?.seasonStartMs).toBe(Date.UTC(2026, 9, 19));
+      for (const value of [
+        "2026-10-20",
+        "2026-10-19T00:00:01Z",
+        "2026-10-19T02:00:00+02:00",
+        "2026-10-19 00:00",
+        "1792368000",
+        "next monday",
+      ]) {
+        expect(problems(start(value)), value).toMatch(/REWARDS_SEASON_START/);
+      }
+    });
+
+    it("refuse a referral account that is not an address", () => {
+      expect(problems({ ...base, ...rewards, REWARDS_REFERRAL_ACCOUNT: "not-an-address" })).toMatch(
+        /REWARDS_REFERRAL_ACCOUNT/,
       );
     });
   });

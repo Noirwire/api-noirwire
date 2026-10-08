@@ -8,6 +8,7 @@ export const VERIFIER = Symbol("VERIFIER");
 export const SESSIONS = Symbol("SESSIONS");
 export const RELAYER = Symbol("RELAYER");
 export const PROFILES = Symbol("PROFILES");
+export const REWARDS = Symbol("REWARDS");
 export const LIVE_PRICES = Symbol("LIVE_PRICES");
 export const RPC_GATES = Symbol("RPC_GATES");
 export const JUPITER_GATE = Symbol("JUPITER_GATE");
