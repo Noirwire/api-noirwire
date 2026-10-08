@@ -45,6 +45,7 @@ const memberState = z
     invited: z.number().int().nonnegative(),
     was_invited: z.boolean(),
     joined_week: z.number().int(),
+    member_number: z.number().int().positive(),
     points: amount,
     week_fee_micro_usdc: amount,
     week_score: amount,
@@ -57,12 +58,19 @@ const memberState = z
     invited: row.invited,
     wasInvited: row.was_invited,
     joinedWeek: row.joined_week,
+    memberNumber: row.member_number,
     points: row.points,
     weekFeeMicroUsdc: row.week_fee_micro_usdc,
     weekScore: row.week_score,
     weekTotalScore: row.week_total_score,
     weekTraders: row.week_traders,
   }));
+const totals = z
+  .object({
+    members: z.number().int().nonnegative(),
+    week_traders: z.number().int().nonnegative(),
+  })
+  .transform((row) => ({ members: row.members, weekTraders: row.week_traders }));
 
 export function createRewardsDatabase(deps: {
   url: string;
@@ -127,6 +135,7 @@ export function createRewardsDatabase(deps: {
           p_fingerprint: credit.fingerprint,
           p_week: credit.week,
           p_fee_micro_usdc: credit.feeMicroUsdc.toString(),
+          p_counted_micro_usdc: credit.countedMicroUsdc.toString(),
         },
         credited,
       ),
@@ -134,7 +143,6 @@ export function createRewardsDatabase(deps: {
     settle: (weeks, weeklyPoints) =>
       call("rewards_settle", { p_weeks: weeks, p_weekly_points: weeklyPoints }, z.null()),
 
-    traders: (week) =>
-      call("rewards_week_traders", { p_week: week }, z.number().int().nonnegative()),
+    totals: (week) => call("rewards_totals", { p_week: week }, totals),
   };
 }

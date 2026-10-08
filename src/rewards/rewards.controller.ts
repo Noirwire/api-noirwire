@@ -30,6 +30,7 @@ const EXAMPLE_STATE = {
   code: EXAMPLE_CODE,
   codeActive: true,
   invited: 2,
+  memberNumber: 317,
   wasInvited: false,
   boostWeeksLeft: 0,
   points: "1250",
@@ -50,7 +51,7 @@ const THE_REWARDS_KEY =
 const NO_WALLET_ADDRESS = `**Contains wallet addresses: no.** ${THE_REWARDS_KEY}`;
 
 const KEPT =
-  "**Stored:** the rewards key, its referral code, who invited it, the week and the UTC day it joined, its fee total per week and its points. Never a portfolio, a transaction, a session id, an IP address or a time of day.";
+  "**Stored:** the rewards key, its referral code, who invited it, the week and the UTC day it joined, its member number, its fee total per week (as paid and as counted) and its points. Never a portfolio, a transaction, a session id, an IP address or a time of day.";
 
 const QUOTAS = `**Quotas (per minute):** ${REWARDS_LIMITS.perSession} per session, ${REWARDS_LIMITS.perIp} per address, ${REWARDS_LIMITS.total} in total, shared by the config, join and state routes.`;
 
@@ -72,7 +73,16 @@ const signatureOf = (what: string) => ({
 
 const STATE = {
   type: "object",
-  required: ["code", "codeActive", "invited", "wasInvited", "boostWeeksLeft", "points", "week"],
+  required: [
+    "code",
+    "codeActive",
+    "invited",
+    "memberNumber",
+    "wasInvited",
+    "boostWeeksLeft",
+    "points",
+    "week",
+  ],
   properties: {
     code: {
       type: "string",
@@ -84,6 +94,11 @@ const STATE = {
         "Whether others can join with the code: true once the member has one credited trade.",
     },
     invited: { type: "integer", description: "How many members joined with this member's code." },
+    memberNumber: {
+      type: "integer",
+      description:
+        "The member's place in the order of joining, from 1: the first key to join is 1, the next 2. Given once, at the first join, and never changed or given to another. A join that was refused took no number.",
+    },
     wasInvited: { type: "boolean", description: "Whether the member joined with someone's code." },
     boostWeeksLeft: {
       type: "integer",
@@ -111,12 +126,12 @@ const STATE = {
         feeMicroUsdc: {
           type: "string",
           description:
-            "The fees of the member's claimed trades in that week, in millionths of a USDC, as a string.",
+            "The fees of the member's claimed trades in that week, in millionths of a USDC, as a string. Always what the trades really paid: a trade of the double hour is shown here once, though it counts twice toward the share.",
         },
         shareBps: {
           type: "integer",
           description:
-            "The member's share of that week's points as it stands, in hundredths of a percent, rounded down. An estimate: it moves with every claim, anyone's, until the week is settled.",
+            "The member's share of that week's points as it stands, in hundredths of a percent, rounded down. Worked out from fees as they are counted, so a trade of the double hour weighs twice. An estimate: it moves with every claim, anyone's, until the week is settled.",
         },
         traders: {
           type: "integer",
@@ -194,6 +209,10 @@ export class RewardsController {
       "",
       "`tradersThisWeek` is how many members have a fee credited in the running week, so that a wallet can show how early a member would be. It is a count and nothing else: no member, no fee, no total. This server reads it from the database at most once in 60 seconds and answers everyone with that reading in between, so it can be up to a minute old. When the database gives no answer it is null and the rest of the answer is unchanged: whether rewards are on never depends on the database.",
       "",
+      "`members` is how many keys have joined, read and kept the same way and in the same read. It is answered outside the season too, since joining is open then.",
+      "",
+      "`doubleHour` is the one hour, when this deployment has one, in which a trade's fee counts twice toward its member's score for that week. It comes from this server's configuration. Whether a trade falls in it is decided by this server from the block the chain put the trade in, from `startsAt` up to but not at `endsAt`, and never from anything a wallet sends. The week still splits the same points.",
+      "",
       "**Contains wallet addresses: no.** Nothing of the caller is sent to the database for this request, and nothing is stored.",
       "",
       QUOTAS,
@@ -203,7 +222,15 @@ export class RewardsController {
     "The season, or that there are no rewards here.",
     {
       type: "object",
-      required: ["enabled", "seasonStart", "seasonWeeks", "weeklyPoints", "tradersThisWeek"],
+      required: [
+        "enabled",
+        "seasonStart",
+        "seasonWeeks",
+        "weeklyPoints",
+        "members",
+        "tradersThisWeek",
+        "doubleHour",
+      ],
       properties: {
         enabled: {
           type: "boolean",
@@ -226,6 +253,30 @@ export class RewardsController {
           nullable: true,
           description: "The points one week splits between its members.",
         },
+        members: {
+          type: "integer",
+          nullable: true,
+          description:
+            "How many keys have joined, in all. Up to 60 seconds old. Answered outside the season too. Null when rewards are off, and when the database gave no answer.",
+        },
+        doubleHour: {
+          type: "object",
+          nullable: true,
+          description:
+            "The one hour in which a trade's fee counts twice toward its member's score, or null when this deployment has none or rewards are off. A trade is in it when its block time is at or after `startsAt` and before `endsAt`.",
+          required: ["startsAt", "endsAt"],
+          properties: {
+            startsAt: {
+              type: "string",
+              description: "When the hour begins, as an ISO 8601 date and time in UTC.",
+            },
+            endsAt: {
+              type: "string",
+              description:
+                "When it ends, 60 minutes later, as an ISO 8601 date and time in UTC. A trade at this very moment counts once.",
+            },
+          },
+        },
         tradersThisWeek: {
           type: "integer",
           nullable: true,
@@ -242,7 +293,24 @@ export class RewardsController {
           seasonStart: "2026-10-19T00:00:00.000Z",
           seasonWeeks: SEASON_WEEKS,
           weeklyPoints: WEEKLY_POINTS,
+          members: 317,
           tradersThisWeek: 48,
+          doubleHour: null,
+        },
+      },
+      doubleHour: {
+        summary: "With a double hour",
+        value: {
+          enabled: true,
+          seasonStart: "2026-10-19T00:00:00.000Z",
+          seasonWeeks: SEASON_WEEKS,
+          weeklyPoints: WEEKLY_POINTS,
+          members: 317,
+          tradersThisWeek: 48,
+          doubleHour: {
+            startsAt: "2026-11-07T18:00:00.000Z",
+            endsAt: "2026-11-07T19:00:00.000Z",
+          },
         },
       },
       off: {
@@ -252,7 +320,9 @@ export class RewardsController {
           seasonStart: null,
           seasonWeeks: null,
           weeklyPoints: null,
+          members: null,
           tradersThisWeek: null,
+          doubleHour: null,
         },
       },
     },
@@ -357,7 +427,7 @@ export class RewardsController {
       "**Signed.** `signature` is the rewards key's over these four lines, joined by a line feed and with none after the last: `NoirWire rewards v1`, `state`, the rewards key, `at` in decimal. " +
         SIGNED_TIME,
       "",
-      `**How points come about.** A member's score for a week is the fees of their own claimed trades, times 1.1 while they are a member who joined with a code and within ${INVITED_BONUS_WEEKS} weeks of the week they joined in, plus 0.2 of the fees of the members who joined with their code. A trade made in a week before its member joined, and claimed after, counts once and earns the inviter nothing. A week is settled once, on the first request that reaches this server more than 24 hours after it ended: its ${WEEKLY_POINTS.toLocaleString("en-US")} points are split by score, each share rounded down. A week with no fees hands out nothing.`,
+      `**How points come about.** A member's score for a week is the fees of their own claimed trades (a trade made in the double hour counted twice, see \`GET /v1/rewards/config\`), times 1.1 while they are a member who joined with a code and within ${INVITED_BONUS_WEEKS} weeks of the week they joined in, plus 0.2 of the fees of the members who joined with their code. A trade made in a week before its member joined, and claimed after, counts once and earns the inviter nothing. A week is settled once, on the first request that reaches this server more than 24 hours after it ended: its ${WEEKLY_POINTS.toLocaleString("en-US")} points are split by score, each share rounded down. A week with no fees hands out nothing.`,
       "",
       NO_WALLET_ADDRESS,
       "",
@@ -413,7 +483,7 @@ export class RewardsController {
       "",
       "**A trade is credited once**, whoever claims it. A second claim of the same transaction is answered `409 already_claimed` and changes nothing.",
       "",
-      "**Contains wallet addresses: yes.** The portfolio, next to the rewards key and the transaction. This is the one rewards request that names one. **Forwarded upstream:** the transaction's id alone, to the RPC provider, from this server's address. **Stored:** the fee, added to the member's week, and a keyed fingerprint of the transaction's id (HMAC-SHA256 under a secret only this server holds). The portfolio and the id itself are used for the checks and then dropped: neither is stored, logged or put in an error.",
+      "**Contains wallet addresses: yes.** The portfolio, next to the rewards key and the transaction. This is the one rewards request that names one. **Forwarded upstream:** the transaction's id alone, to the RPC provider, from this server's address. **Stored:** the fee, added to the member's week as it was paid and as it counts (twice for a trade whose block time is in the double hour), and a keyed fingerprint of the transaction's id (HMAC-SHA256 under a secret only this server holds). The portfolio and the id itself are used for the checks and then dropped: neither is stored, logged or put in an error.",
       "",
       `**Quotas (per minute):** ${CLAIM_LIMITS.perSession} per session, ${CLAIM_LIMITS.perIp} per address, ${CLAIM_LIMITS.total} in total. The read of the chain also waits its turn at the RPC provider's allowance, like \`POST /v1/rpc\`.`,
       "",
@@ -468,7 +538,8 @@ export class RewardsController {
         credited: { type: "boolean", enum: [true], description: "Always true." },
         feeMicroUsdc: {
           type: "string",
-          description: "The fee credited, in millionths of a USDC, as a string.",
+          description:
+            "The fee credited, in millionths of a USDC, as a string: what the trade really paid, also for a trade of the double hour.",
         },
         state: { ...STATE, description: "The member's state after the credit." },
       },

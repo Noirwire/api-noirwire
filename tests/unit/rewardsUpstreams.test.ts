@@ -87,6 +87,7 @@ describe("the rewards database", () => {
       fingerprint: "ab12",
       week: 2,
       feeMicroUsdc: 9_007_199_254_740_993n,
+      countedMicroUsdc: 18_014_398_509_481_986n,
     });
     expect(sent[0].url).toBe(`${DATABASE_URL}/rest/v1/rpc/rewards_credit`);
     expect(sent[0].body).toEqual({
@@ -94,6 +95,7 @@ describe("the rewards database", () => {
       p_fingerprint: "ab12",
       p_week: 2,
       p_fee_micro_usdc: "9007199254740993",
+      p_counted_micro_usdc: "18014398509481986",
     });
   });
 
@@ -104,6 +106,7 @@ describe("the rewards database", () => {
       invited: 2,
       was_invited: false,
       joined_week: -1,
+      member_number: 317,
       points: "52173",
       week_fee_micro_usdc: "9007199254740993",
       week_score: "12000",
@@ -118,6 +121,7 @@ describe("the rewards database", () => {
         invited: 2,
         wasInvited: false,
         joinedWeek: -1,
+        memberNumber: 317,
         points: 52_173n,
         weekFeeMicroUsdc: 9_007_199_254_740_993n,
         weekScore: 12_000n,
@@ -127,6 +131,14 @@ describe("the rewards database", () => {
     });
     const none = await setup(() => Response.json(null)).database.state(rewardsKey, 2);
     expect(none).toEqual({ value: null });
+  });
+
+  it("reads the members and the week's traders in one call", async () => {
+    const { database, sent } = setup(() => Response.json({ members: 317, week_traders: 48 }));
+    expect(await database.totals(2)).toEqual({ value: { members: 317, weekTraders: 48 } });
+    expect(sent.map(({ url, body }) => [url, body])).toEqual([
+      [`${DATABASE_URL}/rest/v1/rpc/rewards_totals`, { p_week: 2 }],
+    ]);
   });
 
   it("takes a settlement that answers with no body", async () => {
@@ -158,6 +170,7 @@ describe("the rewards database", () => {
       fingerprint: "ab12",
       week: 0,
       feeMicroUsdc: 1n,
+      countedMicroUsdc: 1n,
     });
     expect(code(odd)).toBe("upstream_failed");
   });

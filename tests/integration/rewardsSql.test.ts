@@ -87,10 +87,26 @@ const join = async (
       dailyJoinCap: cap,
     }),
   );
-const credit = async (rewardsKey: string, fingerprint: string, week: number, fee: bigint) =>
-  done(await storage.credit({ rewardsKey, fingerprint, week, feeMicroUsdc: fee }));
+/** A credit of `fee`, counted once toward the score unless `counted` says what it counts for. */
+const credit = async (
+  rewardsKey: string,
+  fingerprint: string,
+  week: number,
+  fee: bigint,
+  counted = fee,
+) =>
+  done(
+    await storage.credit({
+      rewardsKey,
+      fingerprint,
+      week,
+      feeMicroUsdc: fee,
+      countedMicroUsdc: counted,
+    }),
+  );
 const settle = async (weeks: number) => done(await storage.settle(weeks, POT));
-const traders = async (week: number) => done(await storage.traders(week));
+const totals = async (week: number | null) => done(await storage.totals(week));
+const traders = async (week: number) => (await totals(week)).weekTraders;
 const state = async (rewardsKey: string, week: number | null) =>
   done(await storage.state(rewardsKey, week));
 
@@ -109,6 +125,15 @@ const traded = (rewardsKey: string, week: number, fee: bigint) => {
   fingerprints += 1;
   return credit(rewardsKey, `fingerprint-${fingerprints}`, week, fee);
 };
+/** The same for a trade of the double hour: its fee, counted twice. */
+const tradedInTheDoubleHour = (rewardsKey: string, week: number, fee: bigint) => {
+  fingerprints += 1;
+  return credit(rewardsKey, `fingerprint-${fingerprints}`, week, fee, fee * 2n);
+};
+const numbers = () =>
+  rows<{ rewards_key: string; member_number: number }>(
+    "select rewards_key, member_number from public.rewards_members order by member_number",
+  );
 
 beforeAll(async () => {
   db = new PGlite();
@@ -347,7 +372,7 @@ describe("rewards_settle", () => {
     await settle(1);
     // Written past the function, as nothing in the application can: a second settlement would count it.
     await db.query(
-      "insert into public.rewards_week_fees (rewards_key, week, fee_micro_usdc) values ('bob', 0, 1000)",
+      "insert into public.rewards_week_fees (rewards_key, week, fee_micro_usdc, counted_micro_usdc) values ('bob', 0, 1000, 1000)",
     );
     await settle(1);
     expect(await pointsOf(0)).toEqual({ alice: 100_000n });
@@ -377,10 +402,105 @@ describe("rewards_settle", () => {
   });
 });
 
-describe("rewards_week_traders", () => {
+describe("a member's number", () => {
+  it("is 1, 2, 3 in the order of joining", async () => {
+    await join("carol", "CCCCCCCC");
+    await join("alice", "AAAAAAAA");
+    await join("bob", "BBBBBBBB");
+    expect(await numbers()).toEqual([
+      { rewards_key: "carol", member_number: 1 },
+      { rewards_key: "alice", member_number: 2 },
+      { rewards_key: "bob", member_number: 3 },
+    ]);
+  });
+
+  it("stays the same when the member joins again, and is what their state carries", async () => {
+    await join("alice", "AAAAAAAA");
+    await join("bob", "BBBBBBBB");
+    await join("alice", "CCCCCCCC");
+    expect((await state("alice", 0))?.memberNumber).toBe(1);
+    expect((await state("bob", 0))?.memberNumber).toBe(2);
+  });
+
+  it("is not used up by a join the daily cap refused", async () => {
+    await join("alice", "AAAAAAAA", null, { day: 20_000, cap: 1 });
+    expect(await join("bob", "BBBBBBBB", null, { day: 20_000, cap: 1 })).toBe("cap_reached");
+    await join("carol", "CCCCCCCC", null, { day: 20_001, cap: 1 });
+    expect((await state("carol", 0))?.memberNumber).toBe(2);
+  });
+
+  it("is not used up by a join refused for its invite code", async () => {
+    await join("alice", "AAAAAAAA");
+    expect(await join("bob", "BBBBBBBB", "NOBODYS2")).toBe("invite_invalid");
+    await join("carol", "CCCCCCCC");
+    expect((await state("carol", 0))?.memberNumber).toBe(2);
+  });
+
+  it("is not used up by a join refused because its code was taken", async () => {
+    await join("alice", "AAAAAAAA");
+    expect(await join("bob", "AAAAAAAA")).toBe("code_taken");
+    await join("bob", "BBBBBBBB");
+    expect((await state("bob", 0))?.memberNumber).toBe(2);
+  });
+});
+
+describe("a trade of the double hour", () => {
+  it("is shown to its member as the fee it paid, and weighs twice in their share", async () => {
+    await join("alice", "AAAAAAAA");
+    await join("bob", "BBBBBBBB");
+    await traded("alice", 2, 1_000n);
+    await tradedInTheDoubleHour("bob", 2, 1_000n);
+    expect(await state("bob", 2)).toMatchObject({
+      weekFeeMicroUsdc: 1_000n,
+      weekScore: 20_000n,
+      weekTotalScore: 30_000n,
+    });
+  });
+
+  it("weighs twice in the settlement, for the same pot", async () => {
+    await join("alice", "AAAAAAAA");
+    await join("bob", "BBBBBBBB");
+    await traded("alice", 2, 1_000n);
+    await tradedInTheDoubleHour("bob", 2, 1_000n);
+    await settle(3);
+    expect(await pointsOf(2)).toEqual({ alice: 33_333n, bob: 66_666n });
+  });
+
+  it("earns the inviter 0.2 of the fee as it is counted", async () => {
+    await join("alice", "AAAAAAAA");
+    await traded("alice", 0, 1n);
+    await join("bob", "BBBBBBBB", "AAAAAAAA", { week: 1 });
+    await tradedInTheDoubleHour("bob", 1, 1_000n);
+    // Bob's 2,000 counted: 2,200 for him with the bonus, 400 for Alice.
+    expect((await state("alice", 1))?.weekScore).toBe(4_000n);
+    await settle(2);
+    expect(await pointsOf(1)).toEqual({ alice: 15_384n, bob: 84_615n });
+  });
+
+  it("adds to what the member's other trades of the week paid and counted, each kept apart", async () => {
+    await join("alice", "AAAAAAAA");
+    await traded("alice", 2, 500n);
+    await tradedInTheDoubleHour("alice", 2, 1_000n);
+    expect(await state("alice", 2)).toMatchObject({ weekFeeMicroUsdc: 1_500n, weekScore: 25_000n });
+  });
+
+  it("cannot be credited as counting for less than it paid", async () => {
+    await join("alice", "AAAAAAAA");
+    await expect(credit("alice", "odd", 2, 1_000n, 999n)).rejects.toThrow(/check constraint/);
+  });
+});
+
+describe("rewards_totals", () => {
   beforeEach(async () => {
     await join("alice", "AAAAAAAA");
     await join("bob", "BBBBBBBB");
+  });
+
+  it("counts every member, traders or not, whichever week is asked about and outside the season", async () => {
+    await join("carol", "CCCCCCCC");
+    await traded("alice", 2, 1_000n);
+    expect([(await totals(2)).members, (await totals(7)).members]).toEqual([3, 3]);
+    expect(await totals(null)).toEqual({ members: 3, weekTraders: 0 });
   });
 
   it("counts the members with a fee in the week, and none who only joined", async () => {
@@ -425,6 +545,7 @@ describe("rewards_state", () => {
       invited: 0,
       wasInvited: false,
       joinedWeek: 0,
+      memberNumber: 1,
       points: 100_000n,
       weekFeeMicroUsdc: 300n,
       weekScore: 3_000n,
@@ -453,10 +574,10 @@ describe("rewards_state", () => {
 describe("who may reach the rewards tables", () => {
   const CALLS = [
     "public.rewards_scores(0)",
-    "public.rewards_week_traders(0)",
+    "public.rewards_totals(0)",
     "public.rewards_join('mallory', 'MMMMMMMM', null, 0, 0, 1000)",
     "public.rewards_state('alice', 0)",
-    "public.rewards_credit('alice', 'forged', 0, 1000000)",
+    "public.rewards_credit('alice', 'forged', 0, 1000000, 1000000)",
     "public.rewards_settle(12, 100000)",
   ];
 
@@ -524,6 +645,7 @@ describe("the rules in SQL and in points.ts", () => {
     const WEEKS = 12;
     const members: Scorer[] = [];
     const fees = Array.from({ length: WEEKS }, () => new Map<string, bigint>());
+    let doubledTrades = 0;
 
     for (let index = 0; index < 40; index += 1) {
       const rewardsKey = `member-${index}`;
@@ -541,8 +663,12 @@ describe("the rules in SQL and in points.ts", () => {
         if (next(4) === 0) continue;
         for (let trades = next(3); trades >= 0; trades -= 1) {
           const fee = BigInt(next(5_000_000) + 1) * BigInt(next(1_000) + 1);
-          await traded(rewardsKey, week, fee);
-          fees[week].set(rewardsKey, (fees[week].get(rewardsKey) ?? 0n) + fee);
+          // One trade in five was made in the double hour. The rules are given fees as they count.
+          const doubled = next(5) === 0;
+          doubledTrades += doubled ? 1 : 0;
+          await (doubled ? tradedInTheDoubleHour : traded)(rewardsKey, week, fee);
+          const counted = doubled ? fee * 2n : fee;
+          fees[week].set(rewardsKey, (fees[week].get(rewardsKey) ?? 0n) + counted);
         }
       }
     }
@@ -569,5 +695,6 @@ describe("the rules in SQL and in points.ts", () => {
       true,
       true,
     ]);
+    expect(doubledTrades).toBeGreaterThan(50);
   });
 });

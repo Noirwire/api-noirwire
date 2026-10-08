@@ -61,6 +61,8 @@ export type RewardsConfig = {
   referralAccount: string;
   /** The most new members made on one UTC day, whoever asks. */
   dailyJoinCap: number;
+  /** When the one hour in which a trade's fee counts twice begins, in milliseconds, or null when there is none. */
+  doubleHourStartMs: number | null;
 };
 
 export type Config = {
@@ -354,6 +356,8 @@ function profileConfig(
 
 /** A date, or a date and time in UTC, as ISO 8601 writes one. */
 const isoInstant = z.union([z.iso.date(), z.iso.datetime()]);
+/** A date and time that says which offset it is written in. */
+const offsetInstant = z.iso.datetime({ offset: true });
 
 /**
  * The rewards season and where it is kept, or null when this deployment
@@ -369,6 +373,11 @@ const isoInstant = z.union([z.iso.date(), z.iso.datetime()]);
  * `REWARDS_DAILY_JOIN_CAP` bounds how many keys become members on one UTC
  * day, whoever asks: a member costs nothing to make, so without it one
  * caller could fill the table.
+ *
+ * `REWARDS_DOUBLE_HOUR_START` names the one hour in which a trade's fee
+ * counts twice toward the week's score. It must say which offset it is
+ * written in: an hour that everyone was told about must not move with the
+ * server's time zone. Alone it switches nothing on.
  */
 function rewardsConfig(
   env: Env,
@@ -394,8 +403,22 @@ function rewardsConfig(
     problems.push("REWARDS_REFERRAL_ACCOUNT must be a Solana address.");
   }
   const dailyJoinCap = count("REWARDS_DAILY_JOIN_CAP", 2_000, 1_000_000);
+  const doubleHour = read("REWARDS_DOUBLE_HOUR_START");
+  const doubleHourStartMs = doubleHour ? Date.parse(doubleHour) : null;
+  if (doubleHour && !offsetInstant.safeParse(doubleHour).success) {
+    problems.push(
+      "REWARDS_DOUBLE_HOUR_START must be an ISO date and time with an offset or Z, such as 2026-11-07T18:00:00Z.",
+    );
+  }
   if (problems.length > before) return null;
-  return { databaseSecretKey, fingerprintSecret, seasonStartMs, referralAccount, dailyJoinCap };
+  return {
+    databaseSecretKey,
+    fingerprintSecret,
+    seasonStartMs,
+    referralAccount,
+    dailyJoinCap,
+    doubleHourStartMs,
+  };
 }
 
 /**

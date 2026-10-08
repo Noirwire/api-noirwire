@@ -32,6 +32,7 @@ import { RewardsController } from "./rewards.controller.js";
               (await gates.heavy.acquire(sessionId)) && (await gates.all.acquire(sessionId)),
             seasonStartMs: config.rewards.seasonStartMs,
             dailyJoinCap: config.rewards.dailyJoinCap,
+            doubleHourStartMs: config.rewards.doubleHourStartMs,
             referralAccount: config.rewards.referralAccount,
             usdcMint: usdcMint(config.network),
             fingerprintSecret: config.rewards.fingerprintSecret,
