@@ -21,6 +21,21 @@ export function base58(bytes: Uint8Array): string {
   return "1".repeat(leadingZeros === -1 ? bytes.length : leadingZeros) + text;
 }
 
+/** The bytes `text` writes in base58, or null when it is not base58. */
+export function fromBase58(text: string): Uint8Array | null {
+  let value = 0n;
+  for (const character of text) {
+    const digit = BASE58.indexOf(character);
+    if (digit === -1) return null;
+    value = value * 58n + BigInt(digit);
+  }
+  const bytes: number[] = [];
+  for (; value > 0n; value /= 256n) bytes.unshift(Number(value % 256n));
+  const leadingOnes = [...text].findIndex((character) => character !== "1");
+  const zeros = leadingOnes === -1 ? text.length : leadingOnes;
+  return Uint8Array.from([...new Array<number>(zeros).fill(0), ...bytes]);
+}
+
 export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) if (a[i] !== b[i]) return false;

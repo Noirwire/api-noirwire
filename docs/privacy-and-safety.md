@@ -8,7 +8,7 @@ A wallet address is treated as a secret. What gives one away off chain is not th
 
 **One address per request.** The wallets read each address separately, and this server forwards what it receives and never merges two requests. A JSON-RPC batch is refused, and the one read that lists an address's recent transactions (`getSignaturesForAddress`, which the wallet needs to find a payment that landed without its id being recorded) takes exactly one address and a stated limit of at most 50.
 
-**Nothing is kept.** There is no database. The log has one line per request with the route's pattern, the status and the duration, and for a refusal one fixed word. The type of a log line (`src/common/core/log.ts`) has no free-form field, so there is nowhere to put a token, a session id, an address, a body or a query string, and the integration suite checks that none appears.
+**Nothing of a wallet is kept.** No address, transaction, session or IP is written anywhere. The one thing stored at all is the rewards ledger, for a wallet that joined rewards and only where rewards are configured: it is kept under a key that is not a wallet address, and is described under [Rewards](#rewards). The log has one line per request with the route's pattern, the status and the duration, and for a refusal one fixed word. The type of a log line (`src/common/core/log.ts`) has no free-form field, so there is nowhere to put a token, a session id, an address, a body or a query string, and the integration suite checks that none appears.
 
 ## What is left, plainly
 
@@ -22,6 +22,7 @@ A wallet address is treated as a secret. What gives one away off chain is not th
 | NoirWire's relayer          | No                                         | The portfolio that sends or lends, and its counterparty.                                      | No. One relayed transaction names one portfolio and never the funding wallet.     |
 | MagicBlock's private rollup | No                                         | None. A profile's owner is a key derived for the profile alone, and the record is ciphertext. | No.                                                                               |
 | Supabase Auth               | No                                         | None. It is never sent one.                                                                   | No.                                                                               |
+| NoirWire's rewards database | No                                         | None. A member is a rewards key, derived for rewards alone. No portfolio is ever written.     | No.                                                                               |
 | NoirWire's analytics        | No                                         | None. The event list has no field for one.                                                    | No.                                                                               |
 
 Timing is the honest gap. All of a wallet's requests reach a provider from this server, moments apart. With few users online, a provider that looks for addresses always read together can guess they share an owner. Splitting the requests removes the proof, not the hint. The relay does not delay or pad requests to hide this.
@@ -83,12 +84,32 @@ Creations are rationed harder than anything else here: 3 an hour per session, 10
 
 The program's own refusals that a wallet acts on are answered as `409` under the program's name for them (`StaleRevision`, `ProfileExists`, `ProfileMissing`, `Paused`, `RecordTooLarge`). The rollup's messages are never passed on.
 
+## Rewards
+
+Rewards are points for trades, for a wallet that asks for them: each week of a twelve week season, 100,000 points are split between the members by the trading fees their claimed trades paid NoirWire. A wallet that never joins sends nothing to these routes. The feature is optional: without its configuration the routes are not there.
+
+A member is a rewards key, an ed25519 key the wallet derives from the recovery phrase for this alone. It is not a Solana account, holds nothing, and is never the profile key, the funding wallet's key or a portfolio's. Every request is signed by it over a fixed text (`src/rewards/core/messages.ts`), and a join or a read also carries the time, which must be within 300 seconds of this server's clock. A join's signature covers the invite code too, as this server takes it (trimmed and in capitals, or empty): a join whose code is not the signed one is refused, so nobody on the way can tie a new member to an inviter of their choosing.
+
+**What is stored**, in the Postgres of the Supabase project, in tables only the secret key reads or writes (row level security on, no policy, every function closed to the public roles): the rewards key, its referral code, who invited it, the week and the UTC day it joined, its fee total per week, its points per settled week, and one fingerprint per claimed transaction. There is no column for a portfolio, a transaction, a session, an IP address or a time of day (`supabase/migrations`).
+
+**A claim is the one request that names a portfolio next to a rewards key.** It has to: the portfolio's signature over the claim is what stops anyone else claiming the trade. Both the portfolio and the transaction's id are used for the checks and then dropped. What is kept of the transaction is `HMAC-SHA256` of its id under a secret only this server holds, so that a trade is credited once; the id cannot be read back from it without that secret. Neither is logged or put in an error, and the unit and integration suites look for both in everything stored, logged and answered. This server does see the pair in transit, like every address it relays, and the RPC provider is sent the transaction's id alone, from this server's address.
+
+**What the ledger still shows.** A weekly fee total says how much a member traded that week, to anyone who can read the database, and a claim arrives moments after its trade. Someone holding both the database and this server's fingerprint secret could test whether a given transaction was claimed, though not by whom: a fingerprint is not stored next to a member.
+
+**Nothing a caller says decides what a trade is worth.** `src/rewards/core/claim.ts` reads the transaction from this server's own RPC provider, at `finalized` and under its first signature only: it must have succeeded, the portfolio must be one of its signers, and the fee is how much the USDC token account owned by NoirWire's referral account grew, by the transaction's own token balances. Its block time must fall inside the season, and no more than 24 hours after its week ended.
+
+Recording the fingerprint and adding the fee are one step in the database, and so is settling a week: each is a single SQL function, and a duplicate or a second settlement changes nothing. A week is settled on the first request that reaches this server after its claims closed, at most once, whoever asks.
+
+**An invite is worth something only from the week it was used in.** A trade made in a week before its member joined, and claimed afterwards inside the day of grace, counts once: no bonus for the member and no share for the inviter. Otherwise a code handed over after a good week would pay for trades it had nothing to do with.
+
+**New members are rationed by the day.** A member costs nothing to make and a session is free to replace, so the number of keys that become members on one UTC day is capped (`REWARDS_DAILY_JOIN_CAP`, 2,000 unless configured), in the database and inside the same step that makes the member, so that two joins at once cannot pass it. Past the cap a new key is answered `429` and nothing is created; a key that is already a member is answered as always. Unlike the counters elsewhere here this one is not in memory: it is a count of rows, and a restart does not forget it.
+
 ## The service itself
 
 - **Configuration is validated at start-up** and the service refuses to start on anything missing or malformed: mainnet without a dedicated RPC, an RPC URL that names the other network, half a relayer configuration, fee payers that do not match the replicas one to one, an origin that is not exact, a key address that is not https.
 - **No route takes a query string.** One is refused with `400 invalid_request` everywhere, the same way.
 - **Bodies are bounded and streamed.** The framework parses none: each route reads its own with a size cap, stopping at the limit, and a five-second deadline.
-- **Everything has a timeout.** Thirty seconds for a provider, eight for a relayer replica, the chart source and the price index, ten for the identity provider, five for analytics, sixty for a response as a whole.
+- **Everything has a timeout.** Thirty seconds for a provider, eight for a relayer replica, the chart source, the price index, the rewards database and the read of a claimed transaction, ten for the identity provider, five for analytics, sixty for a response as a whole.
 - **Answers are JSON and nothing else**, with a fixed content type, `Cache-Control: no-store`, `nosniff`, and a content policy under which a response opened as a document can load and run nothing.
 - **Errors say nothing.** A fixed code and sentence: no stack trace, no exception message and no provider message.
 - **CORS** allows only the configured origins, without credentials, and a browser on any other origin is refused outright.

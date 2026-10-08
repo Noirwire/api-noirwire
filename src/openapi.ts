@@ -12,7 +12,8 @@ const MEANING: Record<ErrorCode, string> = {
   origin_not_allowed: "A browser on an origin that is not on this API's list.",
   method_not_allowed: "A JSON-RPC or relayer method outside the route's list. Nothing was done.",
   not_found:
-    "No such route, a path, symbol or range outside a route's list, or a profile route where no profiles are kept.",
+    "No such route, a path, symbol or range outside a route's list, or a profile or rewards route where that feature is not configured.",
+  not_a_member: "The rewards key has not joined. Join with `POST /v1/rewards/join` first.",
   request_timeout: "The body did not arrive within 5 seconds.",
   Paused: "The profile program is paused: no profile is created or written until it is not.",
   RecordTooLarge: "The profile program refused a record above its own size limit.",
@@ -20,10 +21,25 @@ const MEANING: Record<ErrorCode, string> = {
   ProfileMissing: "A profile was written or closed that does not exist. Create it first.",
   StaleRevision:
     "A profile write named a revision that is no longer the stored one. Read, merge and write again.",
+  already_claimed: "The trade was claimed before, by this member or another. Nothing changed.",
   request_too_large: "The body is over the route's size cap.",
   refused: "The relayer route or the profile route refused the transaction. Nothing was signed.",
   insufficient_payment:
     "The relayed transaction pays less than the current price. Ask for a new price.",
+  signature_invalid:
+    "A rewards request's signature is not its key's over the message. Nothing was done.",
+  clock_skew:
+    "The time a rewards request was signed at is more than 300 seconds from this server's clock. Sign again.",
+  invite_code_invalid:
+    "A new rewards member named an invite code that is unknown or not active yet. Nothing was created.",
+  transaction_not_finalized:
+    "The claimed transaction is not finalized yet, or is not known. Ask again shortly.",
+  transaction_failed: "The claimed transaction failed on chain. Nothing was credited.",
+  not_a_signer: "The portfolio is not a signer of the claimed transaction. Nothing was credited.",
+  no_referral_fee:
+    "No USDC reached NoirWire's referral account in the claimed transaction. Nothing was credited.",
+  outside_claim_window:
+    "The claimed trade was made outside the season, or its week ended more than 24 hours ago.",
   rate_limited:
     "A quota is spent, or a provider is rate limiting. Nothing was done. Retry with backoff.",
   internal_error: "An unexpected failure in this API.",
@@ -71,6 +87,9 @@ const DESCRIPTION = [
   "| `GET /v1/relayer` | No | Nobody |",
   "| `POST /v1/profile/*` | No: a profile's owner is a key derived for the profile alone, never a wallet's. The record is ciphertext | MagicBlock's private rollup |",
   "| `GET /v1/profile/config` | No | Nobody |",
+  "| `POST /v1/rewards/claims` | Yes: the portfolio that traded, next to the rewards key | The RPC provider, which is sent the transaction's id alone. The portfolio is checked and dropped |",
+  "| `POST /v1/rewards/join`, `POST /v1/rewards/state` | No: a rewards key is derived for rewards alone, never a wallet's | NoirWire's database |",
+  "| `GET /v1/rewards/config` | No | Nobody |",
   "| `GET /v1/prices`, `GET /v1/history/...` | No | Jupiter, asked by this server on its own schedule, not per caller |",
   "| `POST /v1/events` | No: the closed event list has no field for one | NoirWire's analytics server |",
   "| `POST /v1/session`, `POST /v1/session/refresh` | No | The identity provider (Supabase Auth), asked by this server |",
@@ -81,7 +100,7 @@ const DESCRIPTION = [
   "",
   "## What this API logs and keeps",
   "",
-  "- **Stored:** nothing. There is no database.",
+  "- **Stored:** nothing, for a wallet that has not joined rewards: no route but the rewards routes writes anywhere. For a member, where rewards are configured: the rewards key, its referral code, who invited it, the week and the UTC day it joined, its fee total per week, its points, and a keyed fingerprint of each claimed transaction. Never a portfolio, a transaction, a session id, an IP address or a time of day.",
   "- **Logged:** one line per request with the route's pattern, the status code and the duration, plus, for a refusal or an upstream failure, one fixed word. Never a token, a session id, an address, a transaction, an IP address, a request body or a query string.",
   "- **Held in memory:** counters keyed by session id and by client address, each for one minute (one hour for the hourly budgets), then dropped. Cached public market data.",
   "- **This server does see** every request in transit, including its addresses and the caller's IP. That it keeps none of it is a property of this code, which is published so it can be read.",

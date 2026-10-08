@@ -13,7 +13,7 @@
 
 **NoirWire is a non-custodial Solana wallet, and this is the one server its web and mobile apps talk to: it relays their requests to the RPC provider, Jupiter, MagicBlock and NoirWire's fee relayer, so each of those sees this server's address and never a user's next to their wallet addresses.**
 
-- A wallet address is treated as a secret. Nothing of a caller is forwarded upstream, stored or logged: not an IP, a token, an address, a transaction or a query string.
+- A wallet address is treated as a secret. Nothing of a caller is forwarded upstream, stored or logged: not an IP, a token, an address, a transaction or a query string. The one thing kept at all is the optional rewards ledger, under a key that is not a wallet address.
 - It is not an open proxy. Every route takes a closed list of methods or paths, a bounded body and a bounded answer, and refuses the rest.
 - The fee relayer signs only what this server has checked itself: the whole transaction template, the portfolio's own signature, and a price worked out from a SOL price it reads independently.
 - Sessions are anonymous and short-lived. A token is a quota bucket, not an identity, and nothing that guards money depends on it.
@@ -23,7 +23,7 @@ We publish this source so that anyone can read what stands between their wallet 
 
 ## Architecture
 
-TypeScript on Node 24 with NestJS and Express. No database: the only state is counters and cached market data in the memory of one process.
+TypeScript on Node 24 with NestJS and Express. Its own state is counters and cached market data in the memory of one process. Where rewards are configured, their ledger is kept in the Supabase project's Postgres (`supabase/migrations`), reached only through SQL functions.
 
 Each module keeps its logic in a `core/` folder of plain functions that import no framework, with a thin controller around it. A lint rule enforces that, so the logic's tests never need NestJS.
 
@@ -39,6 +39,7 @@ src/
   private-payments/       allow-listed MagicBlock paths
   relayer/                the transaction template, the price, the budgets, the replicas
   profile/                the three profile transactions, the gate's signature, the rollup
+  rewards/                the season, a member's signed requests, a claimed trade's fee, the ledger
   prices/, history/       market data, read once for everyone
   events/                 the closed list of usage events
   chain/core/             the network, the listed trackers, the chain reads
@@ -57,6 +58,9 @@ src/
 | `POST /v1/profile/challenge`, `/session` | Signing in to the private rollup as a profile's owner                               |
 | `POST /v1/profile/read`, `/blockhash`    | The owner's encrypted profile, and the rollup's blockhash                           |
 | `POST /v1/profile/submit`                | Create, write or close a profile: checked in full, then co-signed and sent          |
+| `GET /v1/rewards/config`                 | Whether points are handed out here, and the season's shape                          |
+| `POST /v1/rewards/join`, `/state`        | Joining rewards with a key derived for them, and reading a member's points          |
+| `POST /v1/rewards/claims`                | Credits a trade's fee to a member: read from the chain, never from the request      |
 | `GET /v1/prices`                         | Live prices of every listed asset                                                   |
 | `GET /v1/history/:symbol/:range`         | One tracker's price history                                                         |
 | `POST /v1/events`                        | One usage event from the closed list                                                |
@@ -125,11 +129,13 @@ Every variable and its default is in [docs/environment.md](docs/environment.md).
 
 Profiles (a wallet's own labels, encrypted on the device and kept on a private rollup) are optional. They are on only when `PROFILE_ROLLUP_URL`, `PROFILE_PROGRAM_ID` and `PROFILE_GATE_SECRET_KEY` are all set; `PROFILE_MAX_DATA_LEN` and `PROFILE_DAILY_CREATE_CAP` have defaults. With any of the first three unset the profile routes answer `404`, `GET /v1/profile/config` says `enabled: false`, and nothing else changes.
 
+Rewards (opt-in points for trades, kept under a key derived for them alone) are optional too. They are on only when `REWARDS_DATABASE_SECRET_KEY`, `REWARDS_FINGERPRINT_SECRET`, `REWARDS_SEASON_START` and `REWARDS_REFERRAL_ACCOUNT` are all set (`REWARDS_DAILY_JOIN_CAP` has a default), and the migration in `supabase/migrations` is applied to the project at `SUPABASE_URL`. With any of the four unset the rewards routes answer `404`, `GET /v1/rewards/config` says `enabled: false`, and nothing else changes.
+
 ## Security
 
 Report a vulnerability privately to **ph1l1ph@proton.me**. See [SECURITY.md](SECURITY.md).
 
-What the code guarantees, and tests hold it to: nothing of a caller reaches a provider or the log; only allow-listed calls are relayed; a provider's answer is passed on only as bounded JSON; the relayer is asked to sign only a transaction that matches the template, carries the portfolio's signature and pays this server's price; a `401` only ever means the caller's own session. What it does not: the counters are per process and are not hard limits, and this code has not been audited.
+What the code guarantees, and tests hold it to: nothing of a caller reaches a provider or the log; only allow-listed calls are relayed; a provider's answer is passed on only as bounded JSON; the relayer is asked to sign only a transaction that matches the template, carries the portfolio's signature and pays this server's price; a `401` only ever means the caller's own session; a rewards claim is credited only for a fee the chain itself shows, and leaves neither the portfolio nor the transaction stored or logged. What it does not: the SQL that keeps the rewards ledger is run by the tests in an in-process Postgres, one connection at a time, so its locks are never contended and the REST interface in front of it is stood in for; the counters are per process and are not hard limits, and this code has not been audited.
 
 ## Licence
 

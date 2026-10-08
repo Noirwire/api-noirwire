@@ -1,6 +1,7 @@
 import { Keypair } from "@solana/web3.js";
 import { z } from "zod";
 import { DEVNET_RPC_URL, isAddress, type Network } from "../../chain/core/network.js";
+import { isWeekStart } from "../../rewards/core/weeks.js";
 
 /**
  * Everything this service is configured with, read once when it starts. A
@@ -49,6 +50,19 @@ export type ProfileConfig = {
   dailyCreateCap: number;
 };
 
+export type RewardsConfig = {
+  /** The secret key of the Supabase project at `SUPABASE_URL`. Never logged, returned or put in an error. */
+  databaseSecretKey: string;
+  /** Keys the fingerprint a claimed transaction is remembered by. */
+  fingerprintSecret: string;
+  /** When week 0 begins: a Monday, 00:00 UTC, in milliseconds. */
+  seasonStartMs: number;
+  /** NoirWire's Jupiter referral account: the owner of the token account a trade's fee is paid into. */
+  referralAccount: string;
+  /** The most new members made on one UTC day, whoever asks. */
+  dailyJoinCap: number;
+};
+
 export type Config = {
   port: number;
   network: Network;
@@ -59,6 +73,7 @@ export type Config = {
   priceHistoryUrl: string;
   relayer: RelayerConfig | null;
   profile: ProfileConfig | null;
+  rewards: RewardsConfig | null;
   auth: {
     supabaseUrl: string;
     issuer: string;
@@ -253,6 +268,7 @@ export function loadConfig(env: Env): Config {
     priceHistoryUrl: url("PRICE_HISTORY_API_URL", "https://datapi.jup.ag"),
     relayer: relayerConfig(env, problems),
     profile: profileConfig(env, problems, count),
+    rewards: rewardsConfig(env, problems, count),
     auth: {
       supabaseUrl,
       issuer: `${supabaseUrl}/auth/v1`,
@@ -334,6 +350,52 @@ function profileConfig(
     maxDataLen,
     dailyCreateCap,
   };
+}
+
+/** A date, or a date and time in UTC, as ISO 8601 writes one. */
+const isoInstant = z.union([z.iso.date(), z.iso.datetime()]);
+
+/**
+ * The rewards season and where it is kept, or null when this deployment
+ * hands out no points: with any of `REWARDS_DATABASE_SECRET_KEY`,
+ * `REWARDS_FINGERPRINT_SECRET`, `REWARDS_SEASON_START` and
+ * `REWARDS_REFERRAL_ACCOUNT` unset the feature is off, the wallets are told
+ * so, and they work exactly as they do without it.
+ *
+ * With all four set, each must be right or the start is refused: a season
+ * that begins mid-week or a fee read from the wrong account would hand out
+ * points nobody earned. A problem names the variable and never its value.
+ *
+ * `REWARDS_DAILY_JOIN_CAP` bounds how many keys become members on one UTC
+ * day, whoever asks: a member costs nothing to make, so without it one
+ * caller could fill the table.
+ */
+function rewardsConfig(
+  env: Env,
+  problems: string[],
+  count: (name: string, fallback: number, max: number) => number,
+): RewardsConfig | null {
+  const read = (name: string) => env[name]?.trim() ?? "";
+  const databaseSecretKey = read("REWARDS_DATABASE_SECRET_KEY");
+  const fingerprintSecret = read("REWARDS_FINGERPRINT_SECRET");
+  const seasonStart = read("REWARDS_SEASON_START");
+  const referralAccount = read("REWARDS_REFERRAL_ACCOUNT");
+  if (!databaseSecretKey || !fingerprintSecret || !seasonStart || !referralAccount) return null;
+
+  const before = problems.length;
+  if (fingerprintSecret.length < 32) {
+    problems.push("REWARDS_FINGERPRINT_SECRET must be at least 32 characters.");
+  }
+  const seasonStartMs = isoInstant.safeParse(seasonStart).success ? Date.parse(seasonStart) : NaN;
+  if (!isWeekStart(seasonStartMs)) {
+    problems.push("REWARDS_SEASON_START must be an ISO date that is a Monday, 00:00 UTC.");
+  }
+  if (!isAddress(referralAccount)) {
+    problems.push("REWARDS_REFERRAL_ACCOUNT must be a Solana address.");
+  }
+  const dailyJoinCap = count("REWARDS_DAILY_JOIN_CAP", 2_000, 1_000_000);
+  if (problems.length > before) return null;
+  return { databaseSecretKey, fingerprintSecret, seasonStartMs, referralAccount, dailyJoinCap };
 }
 
 /**

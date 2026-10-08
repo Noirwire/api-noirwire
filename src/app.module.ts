@@ -13,6 +13,7 @@ import { PricesModule } from "./prices/prices.module.js";
 import { PrivatePaymentsController } from "./private-payments/private-payments.controller.js";
 import { ProfileModule } from "./profile/profile.module.js";
 import { RelayerModule } from "./relayer/relayer.module.js";
+import { RewardsModule } from "./rewards/rewards.module.js";
 import { RpcController } from "./rpc/rpc.controller.js";
 import { SessionModule } from "./session/session.module.js";
 
@@ -27,6 +28,7 @@ export class AppModule {
         SessionModule,
         RelayerModule,
         ProfileModule,
+        RewardsModule,
         PricesModule,
       ],
       controllers: [

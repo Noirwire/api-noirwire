@@ -5648,6 +5648,1727 @@
         "tags": ["Profile"]
       }
     },
+    "/v1/rewards/config": {
+      "get": {
+        "description": "Rewards are points for trades, for a wallet that asks for them. Each week of a 12 week season, 100,000 points are split between the members by the trading fees their claimed trades paid NoirWire that week. A wallet that never joins sends nothing here, and works the same.\n\nSays whether this deployment hands out points and, when it does, when the season starts, how many weeks it lasts and how many points a week splits. These come from this server's own configuration. When `enabled` is false every other rewards route answers `404`, and a wallet shows nothing of rewards.\n\n**Who calls it:** the wallets, before they show anything of rewards.\n\n**Contains wallet addresses: no.** Nothing is read from the database for this request.\n\n**Quotas (per minute):** 30 per session, 300 per address, 600 in total, shared by the config, join and state routes.",
+        "operationId": "RewardsController_season",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The season, or that there are no rewards here.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["enabled", "seasonStart", "seasonWeeks", "weeklyPoints"],
+                  "properties": {
+                    "enabled": {
+                      "type": "boolean",
+                      "description": "Whether this deployment hands out points. When false, the other fields are null."
+                    },
+                    "seasonStart": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "When week 0 begins: a Monday, 00:00 UTC, as an ISO 8601 date and time. Weeks run Monday to Monday."
+                    },
+                    "seasonWeeks": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "How many weeks the season lasts. A trade outside them earns nothing."
+                    },
+                    "weeklyPoints": {
+                      "type": "integer",
+                      "nullable": true,
+                      "description": "The points one week splits between its members."
+                    }
+                  }
+                },
+                "examples": {
+                  "enabled": {
+                    "summary": "Points are handed out here",
+                    "value": {
+                      "enabled": true,
+                      "seasonStart": "2026-10-19T00:00:00.000Z",
+                      "seasonWeeks": 12,
+                      "weeklyPoints": 100000
+                    }
+                  },
+                  "off": {
+                    "summary": "No rewards",
+                    "value": {
+                      "enabled": false,
+                      "seasonStart": null,
+                      "seasonWeeks": null,
+                      "weeklyPoints": null
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request carries a query string. No route takes one, and one is refused everywhere.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["invalid_request"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "A query string, or a malformed request",
+                    "value": { "code": "invalid_request", "error": "The request is malformed." }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The session token is not accepted here: none was sent, it does not verify (wrong signature, issuer or audience, or expired), or its session is past its maximum age or of an age that cannot be established. This status never means anything else: a provider refusing this server's own credentials is never a `401`. Start or refresh a session and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["unauthorized", "session_expired"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "unauthorized": {
+                    "summary": "Missing or invalid token",
+                    "value": {
+                      "code": "unauthorized",
+                      "error": "A valid session token is required."
+                    }
+                  },
+                  "session_expired": {
+                    "summary": "The session is past its maximum age: start a new one",
+                    "value": {
+                      "code": "session_expired",
+                      "error": "This session has reached its maximum age. Start a new one."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The request names an `Origin` that is not on this API's list. Browsers on other sites are refused; a caller with no `Origin` (the mobile app, a server) is not affected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["origin_not_allowed"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "origin_not_allowed": {
+                    "summary": "Foreign origin",
+                    "value": {
+                      "code": "origin_not_allowed",
+                      "error": "This origin may not call the API from a browser."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "A quota is spent (this session's, this address's or the route's as a whole), this server is holding back to stay inside a provider's allowance (then with a `Retry-After` header, in seconds), or the provider's own rate limit is passed on. Nothing was done with the request. Wait and retry with backoff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["rate_limited"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Quota spent",
+                    "value": {
+                      "code": "rate_limited",
+                      "error": "Too many requests. Wait and try again."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected failure in this API. Nothing of it is described: a fixed message only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["internal_error"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "internal_error": {
+                    "summary": "Unexpected failure",
+                    "value": {
+                      "code": "internal_error",
+                      "error": "The request could not be handled."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The keys that verify session tokens could not be read, so no token can be checked. Nothing was done with the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["unavailable"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "unavailable": {
+                    "summary": "Token keys unavailable",
+                    "value": {
+                      "code": "unavailable",
+                      "error": "The service this request needs is not available. Nothing was done."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "This API did not finish answering within 60 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["response_timeout"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "response_timeout": {
+                    "summary": "The response took too long",
+                    "value": {
+                      "code": "response_timeout",
+                      "error": "The request took too long to answer."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "session": [] }],
+        "summary": "Whether points are handed out here, and the season's shape",
+        "tags": ["Rewards"]
+      }
+    },
+    "/v1/rewards/join": {
+      "post": {
+        "description": "Makes a rewards key a member and gives it a referral code, or does nothing for a key that already is one. Either way the answer is the member's state, so joining twice is safe.\n\n**Who calls it:** the wallets, when the user turns rewards on, and again on a device the recovery phrase is restored to.\n\n**Signed.** `signature` is the rewards key's over the UTF-8 bytes of these five lines, joined by a line feed (`\\n`): `NoirWire rewards v1`, `join`, the rewards key, `at` in decimal, and the invite code. The invite code is signed as this server takes it: `inviteCode` with the spaces around it removed and in capital letters, or the empty string when none is sent. The fifth line is always there, so with no invite code the message ends with a line feed after `at`. A join whose `inviteCode` is not the one signed for is refused `403 signature_invalid`: nobody on the way can tie a new member to an inviter of their choosing. `at` is the time of signing in Unix seconds, and is refused when it is more than 300 seconds from this server's clock either way.\n\n**An invite code counts once.** `inviteCode` is taken only when the key is new, and only when it is the code of a member with at least one credited trade. For a new key with any other code the answer is `422 invite_code_invalid` and nothing is created; the wallet may join again with another code or with none. For a key that is already a member it is ignored. Letter case does not matter.\n\n**New members are rationed by the day.** No more than a configured number of keys (2,000 unless configured) become members on one UTC day, whoever asks. Past that a new key is answered `429 rate_limited` and nothing is created; it may join the next day. A key that is already a member is answered `200` as always.\n\n**Contains wallet addresses: no.** A member is a rewards key: an ed25519 key the wallet derives from the recovery phrase for this alone. It is not a Solana account and holds nothing. It is never the profile key, the funding wallet's key or a portfolio's.\n\n**Stored:** the rewards key, its referral code, who invited it, the week and the UTC day it joined, its fee total per week and its points. Never a portfolio, a transaction, a session id, an IP address or a time of day.\n\n**Quotas (per minute):** 30 per session, 300 per address, 600 in total, shared by the config, join and state routes.\n\n**Logged:** the route pattern, the status and the duration, and for a refusal one fixed word. Never a key, a signature, a code, a portfolio or a transaction.",
+        "operationId": "RewardsController_join",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["rewardsKey", "at", "signature"],
+                "additionalProperties": false,
+                "properties": {
+                  "rewardsKey": {
+                    "type": "string",
+                    "description": "The member's rewards key. A Solana address: base58, 32 to 44 characters.",
+                    "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+                  },
+                  "at": {
+                    "type": "integer",
+                    "description": "When the request was signed: Unix time in SECONDS, as a JSON number. The message that is signed carries it in decimal."
+                  },
+                  "signature": {
+                    "type": "string",
+                    "description": "The rewards key's ed25519 signature over the UTF-8 bytes of the join message, base58."
+                  },
+                  "inviteCode": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "description": "Another member's referral code, when the user was given one."
+                  }
+                }
+              },
+              "examples": {
+                "join": {
+                  "summary": "Join (dummy values)",
+                  "value": {
+                    "rewardsKey": "11111111111111111111111111111111",
+                    "at": 1790000000,
+                    "signature": "2AXDGYSE4f2sz7tvMMzyHvUfcoJmxudvdhBcmiUSo6ijwfYmfZYsKRxboQMPh3R4kUhXRVdtSXFXMheka4Rc4P2"
+                  }
+                },
+                "invited": {
+                  "summary": "Join with an invite code (dummy values)",
+                  "value": {
+                    "rewardsKey": "11111111111111111111111111111111",
+                    "at": 1790000000,
+                    "signature": "2AXDGYSE4f2sz7tvMMzyHvUfcoJmxudvdhBcmiUSo6ijwfYmfZYsKRxboQMPh3R4kUhXRVdtSXFXMheka4Rc4P2",
+                    "inviteCode": "K7M2QX9R"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The member's state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "codeActive", "invited", "wasInvited", "points", "week"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "The member's own referral code: 8 characters, digits 2 to 9 and capital letters without I and O. Assigned at the first join."
+                    },
+                    "codeActive": {
+                      "type": "boolean",
+                      "description": "Whether others can join with the code: true once the member has one credited trade."
+                    },
+                    "invited": {
+                      "type": "integer",
+                      "description": "How many members joined with this member's code."
+                    },
+                    "wasInvited": {
+                      "type": "boolean",
+                      "description": "Whether the member joined with someone's code."
+                    },
+                    "points": {
+                      "type": "string",
+                      "description": "The member's points from every settled week: a whole number, as a string."
+                    },
+                    "week": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "The running week, or null outside the season: before week 0 begins and once the last week has ended. The points are returned either way.",
+                      "required": ["index", "endsAt", "feeMicroUsdc", "shareBps"],
+                      "properties": {
+                        "index": {
+                          "type": "integer",
+                          "description": "Which week of the season is running, from 0 to 11."
+                        },
+                        "endsAt": {
+                          "type": "string",
+                          "description": "When that week ends: a Monday, 00:00 UTC, as an ISO 8601 date and time."
+                        },
+                        "feeMicroUsdc": {
+                          "type": "string",
+                          "description": "The fees of the member's claimed trades in that week, in millionths of a USDC, as a string."
+                        },
+                        "shareBps": {
+                          "type": "integer",
+                          "description": "The member's share of that week's points as it stands, in hundredths of a percent, rounded down. An estimate: it moves with every claim, anyone's, until the week is settled."
+                        }
+                      }
+                    }
+                  }
+                },
+                "examples": {
+                  "state": {
+                    "summary": "A member (dummy values)",
+                    "value": {
+                      "code": "K7M2QX9R",
+                      "codeActive": true,
+                      "invited": 2,
+                      "wasInvited": false,
+                      "points": "1250",
+                      "week": {
+                        "index": 3,
+                        "endsAt": "2026-11-09T00:00:00.000Z",
+                        "feeMicroUsdc": "61000",
+                        "shareBps": 125
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not JSON, or is not exactly `{ rewardsKey, at, signature }` with an optional `inviteCode`. The request carries a query string. No route takes one, and one is refused everywhere.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["invalid_request"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Malformed request, or a query string",
+                    "value": { "code": "invalid_request", "error": "The request is malformed." }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The session token is not accepted here: none was sent, it does not verify (wrong signature, issuer or audience, or expired), or its session is past its maximum age or of an age that cannot be established. This status never means anything else: a provider refusing this server's own credentials is never a `401`. Start or refresh a session and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["unauthorized", "session_expired"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "unauthorized": {
+                    "summary": "Missing or invalid token",
+                    "value": {
+                      "code": "unauthorized",
+                      "error": "A valid session token is required."
+                    }
+                  },
+                  "session_expired": {
+                    "summary": "The session is past its maximum age: start a new one",
+                    "value": {
+                      "code": "session_expired",
+                      "error": "This session has reached its maximum age. Start a new one."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The signature is not the rewards key's over the message, or `at` is more than 300 seconds from this server's clock. Nothing was done. This says nothing about the session, which a `401` is for. A join whose `inviteCode` differs from the one in the signed message is refused the same way. The request names an `Origin` that is not on this API's list. Browsers on other sites are refused; a caller with no `Origin` (the mobile app, a server) is not affected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": ["signature_invalid", "clock_skew", "origin_not_allowed"]
+                    },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "signature_invalid": {
+                    "summary": "The signature is not the rewards key's over the message",
+                    "value": {
+                      "code": "signature_invalid",
+                      "error": "A signature does not verify. Nothing was done."
+                    }
+                  },
+                  "clock_skew": {
+                    "summary": "`at` is too far from this server's clock: sign again",
+                    "value": {
+                      "code": "clock_skew",
+                      "error": "The signed time is too far from this server's clock. Sign again."
+                    }
+                  },
+                  "origin_not_allowed": {
+                    "summary": "Foreign origin",
+                    "value": {
+                      "code": "origin_not_allowed",
+                      "error": "This origin may not call the API from a browser."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "This deployment hands out no points (`GET /v1/rewards/config` says `enabled: false`), so this route is not there.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["not_found"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "not_found": {
+                    "summary": "Rewards are not configured",
+                    "value": { "code": "not_found", "error": "There is nothing at this path." }
+                  }
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "The request body did not arrive within 5 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["request_timeout"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "request_timeout": {
+                    "summary": "Body too slow",
+                    "value": {
+                      "code": "request_timeout",
+                      "error": "The request body took too long to arrive."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is larger than 1,024 bytes. Reading stops at the limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["request_too_large"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "request_too_large": {
+                    "summary": "Body too large",
+                    "value": {
+                      "code": "request_too_large",
+                      "error": "The request body is too large."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "A new key named an invite code that is unknown or not active yet. Nothing was created. This is the only `422` of this route: the invite code is not valid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["invite_code_invalid"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "invite_code_invalid": {
+                    "summary": "The invite code is unknown, or its member has no credited trade",
+                    "value": {
+                      "code": "invite_code_invalid",
+                      "error": "This invite code is not valid."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The day already has as many new members as it may. Nothing was created; a key that is already a member is not affected. A quota is spent (this session's, this address's or the route's as a whole), this server is holding back to stay inside a provider's allowance (then with a `Retry-After` header, in seconds), or the provider's own rate limit is passed on. Nothing was done with the request. Wait and retry with backoff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["rate_limited"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Quota spent, or the day's new members are all taken",
+                    "value": {
+                      "code": "rate_limited",
+                      "error": "Too many requests. Wait and try again."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected failure in this API. Nothing of it is described: a fixed message only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["internal_error"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "internal_error": {
+                    "summary": "Unexpected failure",
+                    "value": {
+                      "code": "internal_error",
+                      "error": "The request could not be handled."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The database, or for a claim the RPC provider, gave no usable answer (an error, not JSON, too large, or the connection broke), or refused this server's own credentials (never passed on as a `401`). Its body is not passed on.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["upstream_failed", "upstream_refused"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "upstream_failed": {
+                    "summary": "Unusable answer from the database or the RPC provider",
+                    "value": {
+                      "code": "upstream_failed",
+                      "error": "The provider did not give a usable answer."
+                    }
+                  },
+                  "upstream_refused": {
+                    "summary": "This server's own key was refused: an operator's to fix",
+                    "value": {
+                      "code": "upstream_refused",
+                      "error": "The provider refused this server's own credentials."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database, or for a claim the RPC provider, could not be connected to at all. The keys that verify session tokens could not be read, so no token can be checked. Nothing was done with the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["upstream_not_reached", "unavailable"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "upstream_not_reached": {
+                    "summary": "Not reached: it never saw the request",
+                    "value": {
+                      "code": "upstream_not_reached",
+                      "error": "The provider could not be reached. It never received the request."
+                    }
+                  },
+                  "unavailable": {
+                    "summary": "Token keys unavailable",
+                    "value": {
+                      "code": "unavailable",
+                      "error": "The service this request needs is not available. Nothing was done."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The database, or for a claim the RPC provider, did not answer within 8 seconds. This API did not finish answering within 60 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["upstream_timeout", "response_timeout"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "upstream_timeout": {
+                    "summary": "Timed out",
+                    "value": {
+                      "code": "upstream_timeout",
+                      "error": "The provider did not answer in time."
+                    }
+                  },
+                  "response_timeout": {
+                    "summary": "The response took too long",
+                    "value": {
+                      "code": "response_timeout",
+                      "error": "The request took too long to answer."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "session": [] }],
+        "summary": "Join, and read the member's state",
+        "tags": ["Rewards"]
+      }
+    },
+    "/v1/rewards/state": {
+      "post": {
+        "description": "The member's code, how many joined with it, the points from settled weeks, and the running week as it stands.\n\n**Who calls it:** the wallets, when the rewards screen opens.\n\n**Signed.** `signature` is the rewards key's over these four lines, joined by a line feed and with none after the last: `NoirWire rewards v1`, `state`, the rewards key, `at` in decimal. `at` is the time of signing in Unix seconds, and is refused when it is more than 300 seconds from this server's clock either way.\n\n**How points come about.** A member's score for a week is the fees of their own claimed trades, times 1.1 while they are a member who joined with a code and within 8 weeks of the week they joined in, plus 0.2 of the fees of the members who joined with their code. A trade made in a week before its member joined, and claimed after, counts once and earns the inviter nothing. A week is settled once, on the first request that reaches this server more than 24 hours after it ended: its 100,000 points are split by score, each share rounded down. A week with no fees hands out nothing.\n\n**Contains wallet addresses: no.** A member is a rewards key: an ed25519 key the wallet derives from the recovery phrase for this alone. It is not a Solana account and holds nothing. It is never the profile key, the funding wallet's key or a portfolio's.\n\n**Quotas (per minute):** 30 per session, 300 per address, 600 in total, shared by the config, join and state routes.\n\n**Logged:** the route pattern, the status and the duration, and for a refusal one fixed word. Never a key, a signature, a code, a portfolio or a transaction.",
+        "operationId": "RewardsController_state",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["rewardsKey", "at", "signature"],
+                "additionalProperties": false,
+                "properties": {
+                  "rewardsKey": {
+                    "type": "string",
+                    "description": "The member's rewards key. A Solana address: base58, 32 to 44 characters.",
+                    "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+                  },
+                  "at": {
+                    "type": "integer",
+                    "description": "When the request was signed: Unix time in SECONDS, as a JSON number. The message that is signed carries it in decimal."
+                  },
+                  "signature": {
+                    "type": "string",
+                    "description": "The rewards key's ed25519 signature over the UTF-8 bytes of the state message, base58."
+                  }
+                }
+              },
+              "examples": {
+                "state": {
+                  "summary": "Read (dummy values)",
+                  "value": {
+                    "rewardsKey": "11111111111111111111111111111111",
+                    "at": 1790000000,
+                    "signature": "2AXDGYSE4f2sz7tvMMzyHvUfcoJmxudvdhBcmiUSo6ijwfYmfZYsKRxboQMPh3R4kUhXRVdtSXFXMheka4Rc4P2"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The member's state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["code", "codeActive", "invited", "wasInvited", "points", "week"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "description": "The member's own referral code: 8 characters, digits 2 to 9 and capital letters without I and O. Assigned at the first join."
+                    },
+                    "codeActive": {
+                      "type": "boolean",
+                      "description": "Whether others can join with the code: true once the member has one credited trade."
+                    },
+                    "invited": {
+                      "type": "integer",
+                      "description": "How many members joined with this member's code."
+                    },
+                    "wasInvited": {
+                      "type": "boolean",
+                      "description": "Whether the member joined with someone's code."
+                    },
+                    "points": {
+                      "type": "string",
+                      "description": "The member's points from every settled week: a whole number, as a string."
+                    },
+                    "week": {
+                      "type": "object",
+                      "nullable": true,
+                      "description": "The running week, or null outside the season: before week 0 begins and once the last week has ended. The points are returned either way.",
+                      "required": ["index", "endsAt", "feeMicroUsdc", "shareBps"],
+                      "properties": {
+                        "index": {
+                          "type": "integer",
+                          "description": "Which week of the season is running, from 0 to 11."
+                        },
+                        "endsAt": {
+                          "type": "string",
+                          "description": "When that week ends: a Monday, 00:00 UTC, as an ISO 8601 date and time."
+                        },
+                        "feeMicroUsdc": {
+                          "type": "string",
+                          "description": "The fees of the member's claimed trades in that week, in millionths of a USDC, as a string."
+                        },
+                        "shareBps": {
+                          "type": "integer",
+                          "description": "The member's share of that week's points as it stands, in hundredths of a percent, rounded down. An estimate: it moves with every claim, anyone's, until the week is settled."
+                        }
+                      }
+                    }
+                  }
+                },
+                "examples": {
+                  "state": {
+                    "summary": "A member (dummy values)",
+                    "value": {
+                      "code": "K7M2QX9R",
+                      "codeActive": true,
+                      "invited": 2,
+                      "wasInvited": false,
+                      "points": "1250",
+                      "week": {
+                        "index": 3,
+                        "endsAt": "2026-11-09T00:00:00.000Z",
+                        "feeMicroUsdc": "61000",
+                        "shareBps": 125
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not JSON, or is not exactly `{ rewardsKey, at, signature }`. The request carries a query string. No route takes one, and one is refused everywhere.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["invalid_request"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Malformed request, or a query string",
+                    "value": { "code": "invalid_request", "error": "The request is malformed." }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The session token is not accepted here: none was sent, it does not verify (wrong signature, issuer or audience, or expired), or its session is past its maximum age or of an age that cannot be established. This status never means anything else: a provider refusing this server's own credentials is never a `401`. Start or refresh a session and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["unauthorized", "session_expired"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "unauthorized": {
+                    "summary": "Missing or invalid token",
+                    "value": {
+                      "code": "unauthorized",
+                      "error": "A valid session token is required."
+                    }
+                  },
+                  "session_expired": {
+                    "summary": "The session is past its maximum age: start a new one",
+                    "value": {
+                      "code": "session_expired",
+                      "error": "This session has reached its maximum age. Start a new one."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The signature is not the rewards key's over the message, or `at` is more than 300 seconds from this server's clock. Nothing was done. This says nothing about the session, which a `401` is for. The request names an `Origin` that is not on this API's list. Browsers on other sites are refused; a caller with no `Origin` (the mobile app, a server) is not affected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": ["signature_invalid", "clock_skew", "origin_not_allowed"]
+                    },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "signature_invalid": {
+                    "summary": "The signature is not the rewards key's over the message",
+                    "value": {
+                      "code": "signature_invalid",
+                      "error": "A signature does not verify. Nothing was done."
+                    }
+                  },
+                  "clock_skew": {
+                    "summary": "`at` is too far from this server's clock: sign again",
+                    "value": {
+                      "code": "clock_skew",
+                      "error": "The signed time is too far from this server's clock. Sign again."
+                    }
+                  },
+                  "origin_not_allowed": {
+                    "summary": "Foreign origin",
+                    "value": {
+                      "code": "origin_not_allowed",
+                      "error": "This origin may not call the API from a browser."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The rewards key has not joined. Also answered, as `not_found`, where this deployment hands out no points.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["not_a_member", "not_found"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "not_a_member": {
+                    "summary": "The key has not joined",
+                    "value": { "code": "not_a_member", "error": "This rewards key has not joined." }
+                  },
+                  "not_found": {
+                    "summary": "Rewards are not configured",
+                    "value": { "code": "not_found", "error": "There is nothing at this path." }
+                  }
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "The request body did not arrive within 5 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["request_timeout"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "request_timeout": {
+                    "summary": "Body too slow",
+                    "value": {
+                      "code": "request_timeout",
+                      "error": "The request body took too long to arrive."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is larger than 1,024 bytes. Reading stops at the limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["request_too_large"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "request_too_large": {
+                    "summary": "Body too large",
+                    "value": {
+                      "code": "request_too_large",
+                      "error": "The request body is too large."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "A quota is spent (this session's, this address's or the route's as a whole), this server is holding back to stay inside a provider's allowance (then with a `Retry-After` header, in seconds), or the provider's own rate limit is passed on. Nothing was done with the request. Wait and retry with backoff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["rate_limited"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Quota spent",
+                    "value": {
+                      "code": "rate_limited",
+                      "error": "Too many requests. Wait and try again."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected failure in this API. Nothing of it is described: a fixed message only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["internal_error"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "internal_error": {
+                    "summary": "Unexpected failure",
+                    "value": {
+                      "code": "internal_error",
+                      "error": "The request could not be handled."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The database, or for a claim the RPC provider, gave no usable answer (an error, not JSON, too large, or the connection broke), or refused this server's own credentials (never passed on as a `401`). Its body is not passed on.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["upstream_failed", "upstream_refused"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "upstream_failed": {
+                    "summary": "Unusable answer from the database or the RPC provider",
+                    "value": {
+                      "code": "upstream_failed",
+                      "error": "The provider did not give a usable answer."
+                    }
+                  },
+                  "upstream_refused": {
+                    "summary": "This server's own key was refused: an operator's to fix",
+                    "value": {
+                      "code": "upstream_refused",
+                      "error": "The provider refused this server's own credentials."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database, or for a claim the RPC provider, could not be connected to at all. The keys that verify session tokens could not be read, so no token can be checked. Nothing was done with the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["upstream_not_reached", "unavailable"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "upstream_not_reached": {
+                    "summary": "Not reached: it never saw the request",
+                    "value": {
+                      "code": "upstream_not_reached",
+                      "error": "The provider could not be reached. It never received the request."
+                    }
+                  },
+                  "unavailable": {
+                    "summary": "Token keys unavailable",
+                    "value": {
+                      "code": "unavailable",
+                      "error": "The service this request needs is not available. Nothing was done."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The database, or for a claim the RPC provider, did not answer within 8 seconds. This API did not finish answering within 60 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["upstream_timeout", "response_timeout"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "upstream_timeout": {
+                    "summary": "Timed out",
+                    "value": {
+                      "code": "upstream_timeout",
+                      "error": "The provider did not answer in time."
+                    }
+                  },
+                  "response_timeout": {
+                    "summary": "The response took too long",
+                    "value": {
+                      "code": "response_timeout",
+                      "error": "The request took too long to answer."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "session": [] }],
+        "summary": "Read a member's state",
+        "tags": ["Rewards"]
+      }
+    },
+    "/v1/rewards/claims": {
+      "post": {
+        "description": "Credits a member with the fee one of their trades paid NoirWire. The fee is not taken from the request: this server reads the transaction from its own RPC provider, once the chain has finalized it, and credits what NoirWire's referral account received in it.\n\n**Who calls it:** the wallets, after a trade of a portfolio whose user has joined.\n\n**Signed twice.** `rewardsSignature` and `portfolioSignature` are the rewards key's and the portfolio's over the same four lines, joined by a line feed and with none after the last: `NoirWire rewards v1`, `claim`, the rewards key, the transaction's id. The portfolio's signature is what stops anyone else claiming the trade; the rewards key's is what stops a portfolio's trades being claimed for a member who did not ask.\n\n**Every check is made on the transaction itself**, as the chain recorded it:\n\n- It is finalized, under exactly this id, and it succeeded.\n- `portfolio` is one of its signers.\n- The USDC token account of NoirWire's referral account holds more after it than before, by the transaction's own token balances. That increase is the fee.\n- Its block time is inside the season, and no more than 24 hours have passed since the week it falls in ended.\n\n**A trade is credited once**, whoever claims it. A second claim of the same transaction is answered `409 already_claimed` and changes nothing.\n\n**Contains wallet addresses: yes.** The portfolio, next to the rewards key and the transaction. This is the one rewards request that names one. **Forwarded upstream:** the transaction's id alone, to the RPC provider, from this server's address. **Stored:** the fee, added to the member's week, and a keyed fingerprint of the transaction's id (HMAC-SHA256 under a secret only this server holds). The portfolio and the id itself are used for the checks and then dropped: neither is stored, logged or put in an error.\n\n**Quotas (per minute):** 12 per session, 120 per address, 240 in total. The read of the chain also waits its turn at the RPC provider's allowance, like `POST /v1/rpc`.\n\n**Logged:** the route pattern, the status and the duration, and for a refusal one fixed word. Never a key, a signature, a code, a portfolio or a transaction.",
+        "operationId": "RewardsController_claims",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "rewardsKey",
+                  "transaction",
+                  "portfolio",
+                  "portfolioSignature",
+                  "rewardsSignature"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "rewardsKey": {
+                    "type": "string",
+                    "description": "The member's rewards key. A Solana address: base58, 32 to 44 characters.",
+                    "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+                  },
+                  "transaction": {
+                    "type": "string",
+                    "description": "The trade's id: the transaction's first signature, base58."
+                  },
+                  "portfolio": {
+                    "type": "string",
+                    "description": "The portfolio that signed the trade. Never the rewards key. A Solana address: base58, 32 to 44 characters.",
+                    "pattern": "^[1-9A-HJ-NP-Za-km-z]{32,44}$"
+                  },
+                  "portfolioSignature": {
+                    "type": "string",
+                    "description": "The portfolio's ed25519 signature over the UTF-8 bytes of the claim message, base58."
+                  },
+                  "rewardsSignature": {
+                    "type": "string",
+                    "description": "The rewards key's ed25519 signature over the UTF-8 bytes of the claim message, base58."
+                  }
+                }
+              },
+              "examples": {
+                "claim": {
+                  "summary": "Claim a trade (dummy values)",
+                  "value": {
+                    "rewardsKey": "11111111111111111111111111111111",
+                    "transaction": "2AXDGYSE4f2sz7tvMMzyHvUfcoJmxudvdhBcmiUSo6ijwfYmfZYsKRxboQMPh3R4kUhXRVdtSXFXMheka4Rc4P2",
+                    "portfolio": "4vJ9JU1bJJE96FWSJKvHsmmFADCg4gpZQff4P3bkLKi",
+                    "portfolioSignature": "2AXDGYSE4f2sz7tvMMzyHvUfcoJmxudvdhBcmiUSo6ijwfYmfZYsKRxboQMPh3R4kUhXRVdtSXFXMheka4Rc4P2",
+                    "rewardsSignature": "2AXDGYSE4f2sz7tvMMzyHvUfcoJmxudvdhBcmiUSo6ijwfYmfZYsKRxboQMPh3R4kUhXRVdtSXFXMheka4Rc4P2"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The trade was credited.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["credited", "feeMicroUsdc", "state"],
+                  "properties": {
+                    "credited": {
+                      "type": "boolean",
+                      "enum": [true],
+                      "description": "Always true."
+                    },
+                    "feeMicroUsdc": {
+                      "type": "string",
+                      "description": "The fee credited, in millionths of a USDC, as a string."
+                    },
+                    "state": {
+                      "type": "object",
+                      "required": ["code", "codeActive", "invited", "wasInvited", "points", "week"],
+                      "properties": {
+                        "code": {
+                          "type": "string",
+                          "description": "The member's own referral code: 8 characters, digits 2 to 9 and capital letters without I and O. Assigned at the first join."
+                        },
+                        "codeActive": {
+                          "type": "boolean",
+                          "description": "Whether others can join with the code: true once the member has one credited trade."
+                        },
+                        "invited": {
+                          "type": "integer",
+                          "description": "How many members joined with this member's code."
+                        },
+                        "wasInvited": {
+                          "type": "boolean",
+                          "description": "Whether the member joined with someone's code."
+                        },
+                        "points": {
+                          "type": "string",
+                          "description": "The member's points from every settled week: a whole number, as a string."
+                        },
+                        "week": {
+                          "type": "object",
+                          "nullable": true,
+                          "description": "The running week, or null outside the season: before week 0 begins and once the last week has ended. The points are returned either way.",
+                          "required": ["index", "endsAt", "feeMicroUsdc", "shareBps"],
+                          "properties": {
+                            "index": {
+                              "type": "integer",
+                              "description": "Which week of the season is running, from 0 to 11."
+                            },
+                            "endsAt": {
+                              "type": "string",
+                              "description": "When that week ends: a Monday, 00:00 UTC, as an ISO 8601 date and time."
+                            },
+                            "feeMicroUsdc": {
+                              "type": "string",
+                              "description": "The fees of the member's claimed trades in that week, in millionths of a USDC, as a string."
+                            },
+                            "shareBps": {
+                              "type": "integer",
+                              "description": "The member's share of that week's points as it stands, in hundredths of a percent, rounded down. An estimate: it moves with every claim, anyone's, until the week is settled."
+                            }
+                          }
+                        }
+                      },
+                      "description": "The member's state after the credit."
+                    }
+                  }
+                },
+                "examples": {
+                  "credited": {
+                    "summary": "Credited (dummy values)",
+                    "value": {
+                      "credited": true,
+                      "feeMicroUsdc": "61000",
+                      "state": {
+                        "code": "K7M2QX9R",
+                        "codeActive": true,
+                        "invited": 2,
+                        "wasInvited": false,
+                        "points": "1250",
+                        "week": {
+                          "index": 3,
+                          "endsAt": "2026-11-09T00:00:00.000Z",
+                          "feeMicroUsdc": "61000",
+                          "shareBps": 125
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not JSON, is not exactly `{ rewardsKey, transaction, portfolio, portfolioSignature, rewardsSignature }`, or names one key as both the rewards key and the portfolio. The request carries a query string. No route takes one, and one is refused everywhere.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["invalid_request"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "invalid_request": {
+                    "summary": "Malformed request, or a query string",
+                    "value": { "code": "invalid_request", "error": "The request is malformed." }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The session token is not accepted here: none was sent, it does not verify (wrong signature, issuer or audience, or expired), or its session is past its maximum age or of an age that cannot be established. This status never means anything else: a provider refusing this server's own credentials is never a `401`. Start or refresh a session and try again.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["unauthorized", "session_expired"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "unauthorized": {
+                    "summary": "Missing or invalid token",
+                    "value": {
+                      "code": "unauthorized",
+                      "error": "A valid session token is required."
+                    }
+                  },
+                  "session_expired": {
+                    "summary": "The session is past its maximum age: start a new one",
+                    "value": {
+                      "code": "session_expired",
+                      "error": "This session has reached its maximum age. Start a new one."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "One of the two signatures is not its key's over the claim message. Nothing was read from the chain and nothing was credited. The request names an `Origin` that is not on this API's list. Browsers on other sites are refused; a caller with no `Origin` (the mobile app, a server) is not affected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": ["signature_invalid", "origin_not_allowed"]
+                    },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "signature_invalid": {
+                    "summary": "A signature is not its key's over the claim message",
+                    "value": {
+                      "code": "signature_invalid",
+                      "error": "A signature does not verify. Nothing was done."
+                    }
+                  },
+                  "origin_not_allowed": {
+                    "summary": "Foreign origin",
+                    "value": {
+                      "code": "origin_not_allowed",
+                      "error": "This origin may not call the API from a browser."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The rewards key has not joined. Also answered, as `not_found`, where this deployment hands out no points.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["not_a_member", "not_found"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "not_a_member": {
+                    "summary": "The key has not joined",
+                    "value": { "code": "not_a_member", "error": "This rewards key has not joined." }
+                  },
+                  "not_found": {
+                    "summary": "Rewards are not configured",
+                    "value": { "code": "not_found", "error": "There is nothing at this path." }
+                  }
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "The request body did not arrive within 5 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["request_timeout"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "request_timeout": {
+                    "summary": "Body too slow",
+                    "value": {
+                      "code": "request_timeout",
+                      "error": "The request body took too long to arrive."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The transaction was claimed before, by this member or another. Nothing changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["already_claimed"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "already_claimed": {
+                    "summary": "Claimed before",
+                    "value": {
+                      "code": "already_claimed",
+                      "error": "This trade has already been claimed."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request body is larger than 1,024 bytes. Reading stops at the limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["request_too_large"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "request_too_large": {
+                    "summary": "Body too large",
+                    "value": {
+                      "code": "request_too_large",
+                      "error": "The request body is too large."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The transaction failed one of the checks above. Nothing was credited. Only `transaction_not_finalized` is worth asking again for: the chain finalizes a transaction some seconds after it lands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "transaction_not_finalized",
+                        "transaction_failed",
+                        "not_a_signer",
+                        "no_referral_fee",
+                        "outside_claim_window"
+                      ]
+                    },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "transaction_not_finalized": {
+                    "summary": "Not finalized yet, or not found: ask again shortly",
+                    "value": {
+                      "code": "transaction_not_finalized",
+                      "error": "The transaction is not finalized yet. Try again shortly."
+                    }
+                  },
+                  "transaction_failed": {
+                    "summary": "The transaction failed on chain",
+                    "value": {
+                      "code": "transaction_failed",
+                      "error": "The transaction failed. A failed trade earns nothing."
+                    }
+                  },
+                  "not_a_signer": {
+                    "summary": "The portfolio is not a signer of the transaction",
+                    "value": {
+                      "code": "not_a_signer",
+                      "error": "This portfolio did not sign the transaction."
+                    }
+                  },
+                  "no_referral_fee": {
+                    "summary": "No USDC reached NoirWire's referral account in it",
+                    "value": {
+                      "code": "no_referral_fee",
+                      "error": "No trading fee reached NoirWire in this transaction."
+                    }
+                  },
+                  "outside_claim_window": {
+                    "summary": "Outside the season, or its week closed more than 24 hours ago",
+                    "value": {
+                      "code": "outside_claim_window",
+                      "error": "This trade was made outside the season, or too long ago to claim."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "A quota is spent (this session's, this address's or the route's as a whole), this server is holding back to stay inside a provider's allowance (then with a `Retry-After` header, in seconds), or the provider's own rate limit is passed on. Nothing was done with the request. Wait and retry with backoff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["rate_limited"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "rate_limited": {
+                    "summary": "Quota spent",
+                    "value": {
+                      "code": "rate_limited",
+                      "error": "Too many requests. Wait and try again."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "An unexpected failure in this API. Nothing of it is described: a fixed message only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["internal_error"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "internal_error": {
+                    "summary": "Unexpected failure",
+                    "value": {
+                      "code": "internal_error",
+                      "error": "The request could not be handled."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "The database, or for a claim the RPC provider, gave no usable answer (an error, not JSON, too large, or the connection broke), or refused this server's own credentials (never passed on as a `401`). Its body is not passed on.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["upstream_failed", "upstream_refused"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "upstream_failed": {
+                    "summary": "Unusable answer from the database or the RPC provider",
+                    "value": {
+                      "code": "upstream_failed",
+                      "error": "The provider did not give a usable answer."
+                    }
+                  },
+                  "upstream_refused": {
+                    "summary": "This server's own key was refused: an operator's to fix",
+                    "value": {
+                      "code": "upstream_refused",
+                      "error": "The provider refused this server's own credentials."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The database, or for a claim the RPC provider, could not be connected to at all. The keys that verify session tokens could not be read, so no token can be checked. Nothing was done with the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["upstream_not_reached", "unavailable"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "upstream_not_reached": {
+                    "summary": "Not reached: it never saw the request",
+                    "value": {
+                      "code": "upstream_not_reached",
+                      "error": "The provider could not be reached. It never received the request."
+                    }
+                  },
+                  "unavailable": {
+                    "summary": "Token keys unavailable",
+                    "value": {
+                      "code": "unavailable",
+                      "error": "The service this request needs is not available. Nothing was done."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "The database, or for a claim the RPC provider, did not answer within 8 seconds. This API did not finish answering within 60 seconds.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "description": "Every error has this shape. `code` is stable; `error` is a sentence.",
+                  "required": ["code", "error"],
+                  "properties": {
+                    "code": { "type": "string", "enum": ["upstream_timeout", "response_timeout"] },
+                    "error": { "type": "string", "description": "A plain sentence for a person." }
+                  }
+                },
+                "examples": {
+                  "upstream_timeout": {
+                    "summary": "Timed out",
+                    "value": {
+                      "code": "upstream_timeout",
+                      "error": "The provider did not answer in time."
+                    }
+                  },
+                  "response_timeout": {
+                    "summary": "The response took too long",
+                    "value": {
+                      "code": "response_timeout",
+                      "error": "The request took too long to answer."
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [{ "session": [] }],
+        "summary": "Claim a trade's fee for a member",
+        "tags": ["Rewards"]
+      }
+    },
     "/v1/prices": {
       "get": {
         "description": "Every listed tracker's price and SOL's, in dollars, keyed by symbol, with the change over 24 hours. Read from Jupiter's price index, the venue every trade is routed through, so the price on a row and the price at review come from one source.\n\n**Who calls it:** the wallets, every thirty seconds while a screen that shows prices is open.\n\n**Read once for everyone.** The index is read at most once every thirty seconds, however many callers ask; a copy up to thirty seconds past that is still served while a fresh one is fetched. The `Age` header says how many seconds old the prices are. A failed read is never kept. Responses are never cached on the way (`Cache-Control: no-store`).\n\n**Contains wallet addresses: no.** The request carries nothing, and the same answer goes to everyone. **Received by:** Jupiter, which is asked for the listed mints by this server on its own schedule, not per caller, so it learns nothing about who asked.\n\n**Refused:** a query string (400), as on every route.\n\n**Quotas (per minute):** 120 per session, 2,400 per address, 30,000 in total.",
@@ -5915,7 +7636,7 @@
   },
   "info": {
     "title": "NoirWire API",
-    "description": "The NoirWire API stands between the NoirWire wallets (web and mobile) and every outside service a wallet has to ask: the Solana RPC provider, Jupiter, MagicBlock's private payments, NoirWire's fee relayer, the price sources and NoirWire's analytics server. A wallet talks only to this API, so each of those services sees this server's address and never a user's next to the wallet addresses it is asked about.\n\n## Sessions\n\nEvery `/v1` route except the two session routes requires `Authorization: Bearer <accessToken>`. A wallet gets a token from `POST /v1/session` and renews it at `POST /v1/session/refresh`.\n\n- **What a session proves:** that this API issued it and that it has not expired.\n- **What it does not prove:** anything about who holds it. It is not a login. It names no person, no wallet and no device; anyone can get one, and anyone can get another.\n- **When to start one:** only when a wallet has no session, or its session was refused as `session_expired` or `session_invalid`. Otherwise refresh: starting sessions is rationed far harder.\n- **What it is for:** counting. A session is a quota bucket, so limits can be kept per caller and not only per network address.\n- **How long it lasts:** an access token lives about an hour (`expiresAt`, Unix time in seconds). A session as a whole is refused after a maximum age (24 hours by default), on every route and at refresh, with a `401` whose code is `session_expired`. A token whose session age cannot be established is refused the same way. The wallet then starts a new, unrelated session, so the key that joins one wallet's requests together does not live long.\n- **Nothing that guards money depends on it.** The fee relayer's checks are made on the transaction itself and are the same for every caller: see `POST /v1/relayer`.\n\n## What contains wallet addresses, and who receives it\n\n| Route | Carries addresses | Passed to |\n| --- | --- | --- |\n| `POST /v1/rpc` | Yes: the address read, or a whole transaction | The RPC provider |\n| `POST /v1/jupiter/*` | Yes: the portfolio that trades or lends | Jupiter |\n| `GET /v1/jupiter/*` | No | Jupiter |\n| `POST /v1/private-payments/*` | Yes: the funding wallet and the portfolio together | MagicBlock |\n| `POST /v1/relayer` | Yes: the portfolio, its counterparty and the amount | NoirWire's relayer and its RPC provider |\n| `GET /v1/relayer` | No | Nobody |\n| `POST /v1/profile/*` | No: a profile's owner is a key derived for the profile alone, never a wallet's. The record is ciphertext | MagicBlock's private rollup |\n| `GET /v1/profile/config` | No | Nobody |\n| `GET /v1/prices`, `GET /v1/history/...` | No | Jupiter, asked by this server on its own schedule, not per caller |\n| `POST /v1/events` | No: the closed event list has no field for one | NoirWire's analytics server |\n| `POST /v1/session`, `POST /v1/session/refresh` | No | The identity provider (Supabase Auth), asked by this server |\n\nA provider receives the request's content, a fixed user agent and this server's own credentials for it. It never receives the caller's IP address, token, session id, origin, referer, cookies or browser name. Coming back, only a status and a JSON body pass, up to a size cap per route; a provider's headers, and any body that is not JSON, never do.\n\nEach provider still learns what it is asked. The RPC provider sees every address read and every transaction sent, and all of one wallet's requests reach it from this server moments apart, so it can guess which addresses belong together by timing. MagicBlock sees both ends of a private transfer. This API removes the caller's network address from those pictures; it does not remove the pictures.\n\n## What this API logs and keeps\n\n- **Stored:** nothing. There is no database.\n- **Logged:** one line per request with the route's pattern, the status code and the duration, plus, for a refusal or an upstream failure, one fixed word. Never a token, a session id, an address, a transaction, an IP address, a request body or a query string.\n- **Held in memory:** counters keyed by session id and by client address, each for one minute (one hour for the hourly budgets), then dropped. Cached public market data.\n- **This server does see** every request in transit, including its addresses and the caller's IP. That it keeps none of it is a property of this code, which is published so it can be read.\n\n## Quotas and errors\n\nEach route counts a request three times, per minute: against the session, against the client address, and against a total for the route. When any is spent the answer is `429` with code `rate_limited` and nothing was done.\n\nThe routes that reach the RPC provider and Jupiter are also held to what the provider allows this server's key: this server sends each provider fewer requests a second than that, requests wait briefly in a line per session, and the lines are served in turn, so one caller cannot spend the allowance for everyone. A request that would wait too long is answered `429 rate_limited` with a `Retry-After` header (in seconds). A provider's own `429` is passed on as `rate_limited` too. Retry with backoff. The numbers are stated on each route. Counters live in the memory of one process and are not hard limits.\n\nThe client address is the one the hosting platform reports, never one a caller wrote: `X-Forwarded-For` is not read. One operator mechanism exists beside it and is not for third parties: the web app's own server, which forwards its pages' requests, proves itself with a shared secret in `X-NoirWire-Edge` and reports the browser's address in `X-NoirWire-Client-IP`. Without the matching secret both headers are ignored.\n\nA browser calling this API directly (not through the web app's own server) is also bound by CORS: only the origins in `ALLOWED_ORIGINS` are served, a request naming any other origin is refused outright, and a preflight is answered for exactly `Authorization`, `Content-Type` and `solana-client` (the header `@solana/web3.js` adds on its own, including on `/v1/rpc`). Credentials are never allowed, since the token travels in a header and no cookie is used.\n\nEvery answer is JSON (or empty), with a fixed JSON content type, and is never cacheable (`Cache-Control: no-store`).\n\n## Errors\n\nEvery error this API writes has one shape, and nothing else in it: no stack trace, no provider message and nothing echoed from the request.\n\n```json\n{ \"code\": \"rate_limited\", \"error\": \"Too many requests. Wait and try again.\" }\n```\n\n`code` is stable and is what a client acts on. `error` is a plain sentence for a person and may be reworded. Every code, and the one status it comes with:\n\n| Code | Status | Meaning |\n| --- | --- | --- |\n| `invalid_request` | `400` | The body, a field or the query is not what the route takes. Nothing was done. |\n| `unauthorized` | `401` | No session token, or one that does not verify. Start or refresh a session. |\n| `session_expired` | `401` | The session is past its maximum age. Start a new one with `POST /v1/session`. |\n| `session_invalid` | `401` | The refresh token is unknown, already used or revoked. Start a new session. |\n| `origin_not_allowed` | `403` | A browser on an origin that is not on this API's list. |\n| `method_not_allowed` | `403` | A JSON-RPC or relayer method outside the route's list. Nothing was done. |\n| `not_found` | `404` | No such route, a path, symbol or range outside a route's list, or a profile route where no profiles are kept. |\n| `request_timeout` | `408` | The body did not arrive within 5 seconds. |\n| `Paused` | `409` | The profile program is paused: no profile is created or written until it is not. |\n| `RecordTooLarge` | `409` | The profile program refused a record above its own size limit. |\n| `ProfileExists` | `409` | A profile was created for a key that already has one. Write to it instead. |\n| `ProfileMissing` | `409` | A profile was written or closed that does not exist. Create it first. |\n| `StaleRevision` | `409` | A profile write named a revision that is no longer the stored one. Read, merge and write again. |\n| `request_too_large` | `413` | The body is over the route's size cap. |\n| `refused` | `422` | The relayer route or the profile route refused the transaction. Nothing was signed. |\n| `insufficient_payment` | `422` | The relayed transaction pays less than the current price. Ask for a new price. |\n| `rate_limited` | `429` | A quota is spent, or a provider is rate limiting. Nothing was done. Retry with backoff. |\n| `internal_error` | `500` | An unexpected failure in this API. |\n| `upstream_failed` | `502` | A provider's answer was not JSON, was too large, or its connection broke. |\n| `upstream_refused` | `502` | A provider refused this server's own credentials. An operator's to fix. Never a 401. |\n| `no_answer` | `502` | The relayer gave no usable answer: what it did with the request is not known. |\n| `unavailable` | `503` | What the request needs is not available (no token keys, no identity provider). Nothing was done. |\n| `relayer_unavailable` | `503` | No relayer, no replica that could be used, or no price to charge by. The relayer signed nothing: the action may be built again. |\n| `upstream_not_reached` | `503` | A provider could not be connected to at all: it never received the request. |\n| `upstream_timeout` | `504` | A provider did not answer within the route's time limit. |\n| `response_timeout` | `504` | This API did not finish answering within 60 seconds. |\n\n**A `401` means one thing only: the session token is not accepted here.** A wallet may therefore read a `401` on a submit as \"nothing was sent\". A provider that refuses this server's own credentials (it answers 401 or 403 to this server) is never passed on as a 401 or a 403: it is a `502` with code `upstream_refused`, and is logged as an operator error.\n\nA provider's own error body (a Jupiter quote that cannot be filled, a JSON-RPC error from the RPC provider) is not one of this API's errors: it is passed back as the provider wrote it, with the provider's status, provided it is JSON. The exceptions are a provider's `401` and `403` (see above) and its `429`, which becomes this API's `rate_limited`.\n\n## What no API can hide\n\nEverything a wallet does on Solana is public: balances, transfers, trades and the accounts involved can be read by anyone, for ever, whatever route the request took. This API keeps a user's network address away from the services that see their wallet addresses. It does not make on-chain activity private.\n\nAll values in the examples are dummies.",
+    "description": "The NoirWire API stands between the NoirWire wallets (web and mobile) and every outside service a wallet has to ask: the Solana RPC provider, Jupiter, MagicBlock's private payments, NoirWire's fee relayer, the price sources and NoirWire's analytics server. A wallet talks only to this API, so each of those services sees this server's address and never a user's next to the wallet addresses it is asked about.\n\n## Sessions\n\nEvery `/v1` route except the two session routes requires `Authorization: Bearer <accessToken>`. A wallet gets a token from `POST /v1/session` and renews it at `POST /v1/session/refresh`.\n\n- **What a session proves:** that this API issued it and that it has not expired.\n- **What it does not prove:** anything about who holds it. It is not a login. It names no person, no wallet and no device; anyone can get one, and anyone can get another.\n- **When to start one:** only when a wallet has no session, or its session was refused as `session_expired` or `session_invalid`. Otherwise refresh: starting sessions is rationed far harder.\n- **What it is for:** counting. A session is a quota bucket, so limits can be kept per caller and not only per network address.\n- **How long it lasts:** an access token lives about an hour (`expiresAt`, Unix time in seconds). A session as a whole is refused after a maximum age (24 hours by default), on every route and at refresh, with a `401` whose code is `session_expired`. A token whose session age cannot be established is refused the same way. The wallet then starts a new, unrelated session, so the key that joins one wallet's requests together does not live long.\n- **Nothing that guards money depends on it.** The fee relayer's checks are made on the transaction itself and are the same for every caller: see `POST /v1/relayer`.\n\n## What contains wallet addresses, and who receives it\n\n| Route | Carries addresses | Passed to |\n| --- | --- | --- |\n| `POST /v1/rpc` | Yes: the address read, or a whole transaction | The RPC provider |\n| `POST /v1/jupiter/*` | Yes: the portfolio that trades or lends | Jupiter |\n| `GET /v1/jupiter/*` | No | Jupiter |\n| `POST /v1/private-payments/*` | Yes: the funding wallet and the portfolio together | MagicBlock |\n| `POST /v1/relayer` | Yes: the portfolio, its counterparty and the amount | NoirWire's relayer and its RPC provider |\n| `GET /v1/relayer` | No | Nobody |\n| `POST /v1/profile/*` | No: a profile's owner is a key derived for the profile alone, never a wallet's. The record is ciphertext | MagicBlock's private rollup |\n| `GET /v1/profile/config` | No | Nobody |\n| `POST /v1/rewards/claims` | Yes: the portfolio that traded, next to the rewards key | The RPC provider, which is sent the transaction's id alone. The portfolio is checked and dropped |\n| `POST /v1/rewards/join`, `POST /v1/rewards/state` | No: a rewards key is derived for rewards alone, never a wallet's | NoirWire's database |\n| `GET /v1/rewards/config` | No | Nobody |\n| `GET /v1/prices`, `GET /v1/history/...` | No | Jupiter, asked by this server on its own schedule, not per caller |\n| `POST /v1/events` | No: the closed event list has no field for one | NoirWire's analytics server |\n| `POST /v1/session`, `POST /v1/session/refresh` | No | The identity provider (Supabase Auth), asked by this server |\n\nA provider receives the request's content, a fixed user agent and this server's own credentials for it. It never receives the caller's IP address, token, session id, origin, referer, cookies or browser name. Coming back, only a status and a JSON body pass, up to a size cap per route; a provider's headers, and any body that is not JSON, never do.\n\nEach provider still learns what it is asked. The RPC provider sees every address read and every transaction sent, and all of one wallet's requests reach it from this server moments apart, so it can guess which addresses belong together by timing. MagicBlock sees both ends of a private transfer. This API removes the caller's network address from those pictures; it does not remove the pictures.\n\n## What this API logs and keeps\n\n- **Stored:** nothing, for a wallet that has not joined rewards: no route but the rewards routes writes anywhere. For a member, where rewards are configured: the rewards key, its referral code, who invited it, the week and the UTC day it joined, its fee total per week, its points, and a keyed fingerprint of each claimed transaction. Never a portfolio, a transaction, a session id, an IP address or a time of day.\n- **Logged:** one line per request with the route's pattern, the status code and the duration, plus, for a refusal or an upstream failure, one fixed word. Never a token, a session id, an address, a transaction, an IP address, a request body or a query string.\n- **Held in memory:** counters keyed by session id and by client address, each for one minute (one hour for the hourly budgets), then dropped. Cached public market data.\n- **This server does see** every request in transit, including its addresses and the caller's IP. That it keeps none of it is a property of this code, which is published so it can be read.\n\n## Quotas and errors\n\nEach route counts a request three times, per minute: against the session, against the client address, and against a total for the route. When any is spent the answer is `429` with code `rate_limited` and nothing was done.\n\nThe routes that reach the RPC provider and Jupiter are also held to what the provider allows this server's key: this server sends each provider fewer requests a second than that, requests wait briefly in a line per session, and the lines are served in turn, so one caller cannot spend the allowance for everyone. A request that would wait too long is answered `429 rate_limited` with a `Retry-After` header (in seconds). A provider's own `429` is passed on as `rate_limited` too. Retry with backoff. The numbers are stated on each route. Counters live in the memory of one process and are not hard limits.\n\nThe client address is the one the hosting platform reports, never one a caller wrote: `X-Forwarded-For` is not read. One operator mechanism exists beside it and is not for third parties: the web app's own server, which forwards its pages' requests, proves itself with a shared secret in `X-NoirWire-Edge` and reports the browser's address in `X-NoirWire-Client-IP`. Without the matching secret both headers are ignored.\n\nA browser calling this API directly (not through the web app's own server) is also bound by CORS: only the origins in `ALLOWED_ORIGINS` are served, a request naming any other origin is refused outright, and a preflight is answered for exactly `Authorization`, `Content-Type` and `solana-client` (the header `@solana/web3.js` adds on its own, including on `/v1/rpc`). Credentials are never allowed, since the token travels in a header and no cookie is used.\n\nEvery answer is JSON (or empty), with a fixed JSON content type, and is never cacheable (`Cache-Control: no-store`).\n\n## Errors\n\nEvery error this API writes has one shape, and nothing else in it: no stack trace, no provider message and nothing echoed from the request.\n\n```json\n{ \"code\": \"rate_limited\", \"error\": \"Too many requests. Wait and try again.\" }\n```\n\n`code` is stable and is what a client acts on. `error` is a plain sentence for a person and may be reworded. Every code, and the one status it comes with:\n\n| Code | Status | Meaning |\n| --- | --- | --- |\n| `invalid_request` | `400` | The body, a field or the query is not what the route takes. Nothing was done. |\n| `unauthorized` | `401` | No session token, or one that does not verify. Start or refresh a session. |\n| `session_expired` | `401` | The session is past its maximum age. Start a new one with `POST /v1/session`. |\n| `session_invalid` | `401` | The refresh token is unknown, already used or revoked. Start a new session. |\n| `origin_not_allowed` | `403` | A browser on an origin that is not on this API's list. |\n| `method_not_allowed` | `403` | A JSON-RPC or relayer method outside the route's list. Nothing was done. |\n| `signature_invalid` | `403` | A rewards request's signature is not its key's over the message. Nothing was done. |\n| `clock_skew` | `403` | The time a rewards request was signed at is more than 300 seconds from this server's clock. Sign again. |\n| `not_found` | `404` | No such route, a path, symbol or range outside a route's list, or a profile or rewards route where that feature is not configured. |\n| `not_a_member` | `404` | The rewards key has not joined. Join with `POST /v1/rewards/join` first. |\n| `request_timeout` | `408` | The body did not arrive within 5 seconds. |\n| `Paused` | `409` | The profile program is paused: no profile is created or written until it is not. |\n| `RecordTooLarge` | `409` | The profile program refused a record above its own size limit. |\n| `ProfileExists` | `409` | A profile was created for a key that already has one. Write to it instead. |\n| `ProfileMissing` | `409` | A profile was written or closed that does not exist. Create it first. |\n| `StaleRevision` | `409` | A profile write named a revision that is no longer the stored one. Read, merge and write again. |\n| `already_claimed` | `409` | The trade was claimed before, by this member or another. Nothing changed. |\n| `request_too_large` | `413` | The body is over the route's size cap. |\n| `refused` | `422` | The relayer route or the profile route refused the transaction. Nothing was signed. |\n| `insufficient_payment` | `422` | The relayed transaction pays less than the current price. Ask for a new price. |\n| `invite_code_invalid` | `422` | A new rewards member named an invite code that is unknown or not active yet. Nothing was created. |\n| `transaction_not_finalized` | `422` | The claimed transaction is not finalized yet, or is not known. Ask again shortly. |\n| `transaction_failed` | `422` | The claimed transaction failed on chain. Nothing was credited. |\n| `not_a_signer` | `422` | The portfolio is not a signer of the claimed transaction. Nothing was credited. |\n| `no_referral_fee` | `422` | No USDC reached NoirWire's referral account in the claimed transaction. Nothing was credited. |\n| `outside_claim_window` | `422` | The claimed trade was made outside the season, or its week ended more than 24 hours ago. |\n| `rate_limited` | `429` | A quota is spent, or a provider is rate limiting. Nothing was done. Retry with backoff. |\n| `internal_error` | `500` | An unexpected failure in this API. |\n| `upstream_failed` | `502` | A provider's answer was not JSON, was too large, or its connection broke. |\n| `upstream_refused` | `502` | A provider refused this server's own credentials. An operator's to fix. Never a 401. |\n| `no_answer` | `502` | The relayer gave no usable answer: what it did with the request is not known. |\n| `unavailable` | `503` | What the request needs is not available (no token keys, no identity provider). Nothing was done. |\n| `relayer_unavailable` | `503` | No relayer, no replica that could be used, or no price to charge by. The relayer signed nothing: the action may be built again. |\n| `upstream_not_reached` | `503` | A provider could not be connected to at all: it never received the request. |\n| `upstream_timeout` | `504` | A provider did not answer within the route's time limit. |\n| `response_timeout` | `504` | This API did not finish answering within 60 seconds. |\n\n**A `401` means one thing only: the session token is not accepted here.** A wallet may therefore read a `401` on a submit as \"nothing was sent\". A provider that refuses this server's own credentials (it answers 401 or 403 to this server) is never passed on as a 401 or a 403: it is a `502` with code `upstream_refused`, and is logged as an operator error.\n\nA provider's own error body (a Jupiter quote that cannot be filled, a JSON-RPC error from the RPC provider) is not one of this API's errors: it is passed back as the provider wrote it, with the provider's status, provided it is JSON. The exceptions are a provider's `401` and `403` (see above) and its `429`, which becomes this API's `rate_limited`.\n\n## What no API can hide\n\nEverything a wallet does on Solana is public: balances, transfers, trades and the accounts involved can be read by anyone, for ever, whatever route the request took. This API keeps a user's network address away from the services that see their wallet addresses. It does not make on-chain activity private.\n\nAll values in the examples are dummies.",
     "version": "1",
     "contact": {}
   },
