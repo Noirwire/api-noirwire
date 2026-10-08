@@ -2,7 +2,7 @@ import { Keypair } from "@solana/web3.js";
 import { describe, expect, it } from "vitest";
 import type { LogLine } from "../../src/common/core/log.js";
 import { createRelay } from "../../src/common/core/relay.js";
-import { createRewardsDatabase } from "../../src/rewards/core/database.js";
+import { createRewardsDatabase, DATABASE_USER_AGENT } from "../../src/rewards/core/database.js";
 import { createTransactions } from "../../src/rewards/core/transactions.js";
 import { trade, tradeOnTheWire, transactionId } from "../support/rewards.js";
 
@@ -47,6 +47,10 @@ const code = (stored: object) =>
 describe("the rewards database", () => {
   const rewardsKey = Keypair.generate().publicKey.toBase58();
 
+  it("never names a browser as its user agent: Supabase refuses a secret key from one", () => {
+    expect(DATABASE_USER_AGENT).not.toMatch(/mozilla|chrome|safari|firefox|edge|opera/i);
+  });
+
   it("calls one SQL function by name, with the secret key in both headers and nothing else of anyone", async () => {
     const { database, sent } = setup(() => Response.json("joined"));
     const joined = await database.join({
@@ -64,7 +68,7 @@ describe("the rewards database", () => {
         headers: {
           accept: "application/json",
           "content-type": "application/json",
-          "user-agent": "Mozilla/5.0 (compatible; NoirWire)",
+          "user-agent": DATABASE_USER_AGENT,
           apikey: SECRET_KEY,
           authorization: `Bearer ${SECRET_KEY}`,
         },

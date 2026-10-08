@@ -72,6 +72,12 @@ const totals = z
   })
   .transform((row) => ({ members: row.members, weekTraders: row.week_traders }));
 
+/**
+ * Supabase answers 401 to a secret key sent with a browser's user agent, and
+ * the relay's neutral one starts like a browser's. This one names a server.
+ */
+export const DATABASE_USER_AGENT = "noirwire-api";
+
 export function createRewardsDatabase(deps: {
   url: string;
   secretKey: string;
@@ -95,7 +101,11 @@ export function createRewardsDatabase(deps: {
     const replied = await relay(REWARDS_ROUTE, `${url}/rest/v1/rpc/${name}`, {
       method: "POST",
       body: JSON.stringify(args),
-      headers: { apikey: secretKey, Authorization: `Bearer ${secretKey}` },
+      headers: {
+        apikey: secretKey,
+        Authorization: `Bearer ${secretKey}`,
+        "User-Agent": DATABASE_USER_AGENT,
+      },
       maxResponseBytes: MAX_RESPONSE_BYTES,
       timeoutMs: DATABASE_TIMEOUT_MS,
     });

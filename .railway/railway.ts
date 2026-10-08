@@ -25,6 +25,13 @@ const SET_BY_HAND = [
   "PROFILE_GATE_SECRET_KEY",
   "PROFILE_MAX_DATA_LEN",
   "PROFILE_DAILY_CREATE_CAP",
+  // Rewards: on only when the first four are set (see ../docs/deploy.md).
+  "REWARDS_DATABASE_SECRET_KEY",
+  "REWARDS_FINGERPRINT_SECRET",
+  "REWARDS_SEASON_START",
+  "REWARDS_REFERRAL_ACCOUNT",
+  "REWARDS_DAILY_JOIN_CAP",
+  "REWARDS_DOUBLE_HOUR_START",
 ];
 
 export default defineRailway(() => {
