@@ -51,7 +51,7 @@ REWARDS_DAILY_JOIN_CAP=<the most new members on one UTC day; 2000 when unset>
 REWARDS_DOUBLE_HOUR_START=<optional: when the double hour begins, with its offset, such as 2026-11-07T18:00:00Z>
 ```
 
-Before setting them, apply `supabase/migrations` to that project (`npx supabase link`, then `npx supabase db push`): it creates the rewards tables and the SQL functions this server calls. The tables have row level security on and no policy, so only the secret key reaches them. Keep both secrets in Railway only, and seal the variables.
+Before setting them, apply the rewards migration to that project: it creates the rewards tables and the SQL functions this server calls. The project's migration history is kept in the `app-noirwire` repository, which holds the same file, so apply it from there (`npx supabase link`, then `npx supabase db push`). The copy in this repository's `supabase/migrations` is the one the tests execute; keep the two identical. The tables have row level security on and no policy, so only the secret key reaches them. Keep both secrets in Railway only, and seal the variables.
 
 Set `REWARDS_FINGERPRINT_SECRET` and `REWARDS_SEASON_START` once. A new fingerprint secret lets every trade already claimed be claimed again, and a new season start moves the weeks under fees already credited.
 
