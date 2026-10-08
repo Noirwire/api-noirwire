@@ -89,6 +89,7 @@ const join = async (
 const credit = async (rewardsKey: string, fingerprint: string, week: number, fee: bigint) =>
   done(await storage.credit({ rewardsKey, fingerprint, week, feeMicroUsdc: fee }));
 const settle = async (weeks: number) => done(await storage.settle(weeks, POT));
+const traders = async (week: number) => done(await storage.traders(week));
 const state = async (rewardsKey: string, week: number | null) =>
   done(await storage.state(rewardsKey, week));
 
@@ -353,6 +354,40 @@ describe("rewards_settle", () => {
   });
 });
 
+describe("rewards_week_traders", () => {
+  beforeEach(async () => {
+    await join("alice", "AAAAAAAA");
+    await join("bob", "BBBBBBBB");
+  });
+
+  it("counts the members with a fee in the week, and none who only joined", async () => {
+    await traded("alice", 2, 1_000n);
+    expect(await traders(2)).toBe(1);
+    await traded("bob", 2, 1n);
+    expect(await traders(2)).toBe(2);
+  });
+
+  it("counts a member once, however many trades they claimed that week", async () => {
+    await traded("alice", 2, 1_000n);
+    await traded("alice", 2, 2_000n);
+    expect(await traders(2)).toBe(1);
+  });
+
+  it("counts a week on its own: a fee in another week is not this week's trader", async () => {
+    await traded("alice", 1, 1_000n);
+    await traded("bob", 3, 1_000n);
+    expect([await traders(1), await traders(2), await traders(3)]).toEqual([1, 0, 1]);
+  });
+
+  it("is the number a member's state carries for the same week", async () => {
+    await traded("alice", 2, 1_000n);
+    await traded("bob", 2, 1_000n);
+    await traded("bob", 3, 1_000n);
+    expect((await state("alice", 2))?.weekTraders).toBe(await traders(2));
+    expect((await state("alice", 3))?.weekTraders).toBe(1);
+  });
+});
+
 describe("rewards_state", () => {
   it("returns the settled points next to the running week's fee and scores", async () => {
     await join("alice", "AAAAAAAA");
@@ -370,6 +405,7 @@ describe("rewards_state", () => {
       weekFeeMicroUsdc: 300n,
       weekScore: 3_000n,
       weekTotalScore: 4_000n,
+      weekTraders: 2,
     });
   });
 
@@ -393,6 +429,7 @@ describe("rewards_state", () => {
 describe("who may reach the rewards tables", () => {
   const CALLS = [
     "public.rewards_scores(0)",
+    "public.rewards_week_traders(0)",
     "public.rewards_join('mallory', 'MMMMMMMM', null, 0, 0, 1000)",
     "public.rewards_state('alice', 0)",
     "public.rewards_credit('alice', 'forged', 0, 1000000)",
@@ -429,7 +466,7 @@ describe("who may reach the rewards tables", () => {
       ).toMatch(/permission denied for table/);
     });
 
-    it(`lets ${role} execute none of the five functions`, async () => {
+    it(`lets ${role} execute none of the functions`, async () => {
       await join("alice", "AAAAAAAA");
       await db.exec(`reset role; set role ${role}`);
       for (const call of CALLS) {
@@ -493,6 +530,8 @@ describe("the rules in SQL and in points.ts", () => {
       expect(await pointsOf(week), `week ${week}`).toEqual(paid);
       const total = Object.values(paid).reduce((sum, points) => sum + points, 0n);
       expect(total, `week ${week}`).toBeLessThanOrEqual(BigInt(POT));
+      // The stand-in counts a week's traders as the members it holds fees for.
+      expect(await traders(week), `traders of week ${week}`).toBe(fees[week].size);
     }
     // The sequence must reach the edge of the bonus from both sides, or agreeing there proves nothing.
     const invitedTradedAt = (weeksIn: number) =>

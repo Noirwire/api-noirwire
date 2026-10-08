@@ -48,6 +48,7 @@ const memberState = z
     week_fee_micro_usdc: amount,
     week_score: amount,
     week_total_score: amount,
+    week_traders: z.number().int().nonnegative(),
   })
   .transform((row) => ({
     code: row.code,
@@ -58,6 +59,7 @@ const memberState = z
     weekFeeMicroUsdc: row.week_fee_micro_usdc,
     weekScore: row.week_score,
     weekTotalScore: row.week_total_score,
+    weekTraders: row.week_traders,
   }));
 
 export function createRewardsDatabase(deps: {
@@ -129,5 +131,8 @@ export function createRewardsDatabase(deps: {
 
     settle: (weeks, weeklyPoints) =>
       call("rewards_settle", { p_weeks: weeks, p_weekly_points: weeklyPoints }, z.null()),
+
+    traders: (week) =>
+      call("rewards_week_traders", { p_week: week }, z.number().int().nonnegative()),
   };
 }

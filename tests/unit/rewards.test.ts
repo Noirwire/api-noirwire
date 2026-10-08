@@ -4,7 +4,12 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { refusal, type Answer } from "../../src/common/core/answer.js";
 import type { LogLine } from "../../src/common/core/log.js";
 import type { ChainTransaction } from "../../src/rewards/core/claim.js";
-import { CODE_ALPHABET, createRewards, type Rewards } from "../../src/rewards/core/rewards.js";
+import {
+  CODE_ALPHABET,
+  createRewards,
+  TRADERS_TTL_MS,
+  type Rewards,
+} from "../../src/rewards/core/rewards.js";
 import {
   DAY_MS,
   memoryRewardsStorage,
@@ -35,6 +40,7 @@ let looked: string[];
 let allowed: boolean;
 let codes: string[];
 let settleCalls: number;
+let traderCalls: number;
 let databaseDown: Answer | null;
 
 function rewards(options: { off?: boolean; dailyJoinCap?: number } = {}): Rewards {
@@ -53,6 +59,12 @@ function rewards(options: { off?: boolean; dailyJoinCap?: number } = {}): Reward
             settle: (weeks, weeklyPoints) => {
               settleCalls += 1;
               return store.storage.settle(weeks, weeklyPoints);
+            },
+            traders: (week) => {
+              traderCalls += 1;
+              return databaseDown
+                ? Promise.resolve({ failed: databaseDown })
+                : store.storage.traders(week);
             },
           },
           transactions: {
@@ -167,17 +179,19 @@ beforeEach(() => {
   allowed = true;
   codes = [];
   settleCalls = 0;
+  traderCalls = 0;
   databaseDown = null;
 });
 
 describe("a deployment with no rewards", () => {
   it("says so with every field null, and has no other route", async () => {
     const api = rewards({ off: true });
-    expect(read(api.config())).toEqual({
+    expect(read(await api.config())).toEqual({
       enabled: false,
       seasonStart: null,
       seasonWeeks: null,
       weeklyPoints: null,
+      tradersThisWeek: null,
     });
     const member = Keypair.generate();
     const portfolio = Keypair.generate();
@@ -193,13 +207,76 @@ describe("a deployment with no rewards", () => {
 });
 
 describe("the season", () => {
-  it("is stated from the configuration: its start, twelve weeks, 100,000 points a week", () => {
-    expect(read(rewards().config())).toEqual({
+  it("is stated from the configuration: its start, twelve weeks, 100,000 points a week", async () => {
+    expect(read(await rewards().config())).toEqual({
       enabled: true,
       seasonStart: "2026-10-19T00:00:00.000Z",
       seasonWeeks: 12,
       weeklyPoints: 100_000,
+      tradersThisWeek: 0,
     });
+  });
+});
+
+describe("the count of this week's traders", () => {
+  /** A new member with one credited trade at the clock's time. */
+  async function trader(api: Rewards): Promise<Keypair> {
+    const member = Keypair.generate();
+    const portfolio = Keypair.generate();
+    await join(api, member);
+    await claim(api, member, portfolio, landed(portfolio));
+    return member;
+  }
+  const count = async (api: Rewards) => read(await api.config()).tradersThisWeek;
+
+  it("is the members with a fee credited in the running week, and the same number in a member's state", async () => {
+    const api = rewards();
+    const member = await trader(api);
+    await trader(api);
+    await join(api, Keypair.generate());
+    expect(await count(api)).toBe(2);
+    expect(read(await state(api, member)).week.traders).toBe(2);
+  });
+
+  it("is null outside the season, and the database is not asked", async () => {
+    const api = rewards();
+    for (const outside of [SEASON_START_MS - 1_000, SEASON_START_MS + 12 * WEEK_MS]) {
+      clock = outside;
+      expect(await count(api)).toBeNull();
+    }
+    expect(traderCalls).toBe(0);
+  });
+
+  it("is read once and answered for 60 seconds, then read again", async () => {
+    const api = rewards();
+    await trader(api);
+    expect(await count(api)).toBe(1);
+    await trader(api);
+
+    clock += TRADERS_TTL_MS - 1;
+    expect(await count(api)).toBe(1);
+    expect(traderCalls).toBe(1);
+
+    clock += 1;
+    expect(await count(api)).toBe(2);
+    expect(traderCalls).toBe(2);
+  });
+
+  it("is not last week's count in a week that has just begun", async () => {
+    const api = rewards();
+    clock = SEASON_START_MS + 3 * WEEK_MS - 1_000;
+    await trader(api);
+    expect(await count(api)).toBe(1);
+    clock += 1_000;
+    expect(await count(api)).toBe(0);
+  });
+
+  it("is null when the database gives no answer, and rewards are still stated as on", async () => {
+    const api = rewards();
+    databaseDown = refusal("upstream_timeout");
+    const answered = await api.config();
+    expect(answered.status).toBe(200);
+    expect(read(answered)).toMatchObject({ enabled: true, seasonWeeks: 12, tradersThisWeek: null });
   });
 });
 
@@ -220,6 +297,7 @@ describe("joining", () => {
         endsAt: new Date(SEASON_START_MS + 3 * WEEK_MS).toISOString(),
         feeMicroUsdc: "0",
         shareBps: 0,
+        traders: 0,
       },
     });
   });

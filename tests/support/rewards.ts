@@ -223,6 +223,7 @@ export function memoryRewardsStorage() {
         weekFeeMicroUsdc: feesOf(week).get(rewardsKey) ?? 0n,
         weekScore: scores.get(rewardsKey) ?? 0n,
         weekTotalScore: [...scores.values()].reduce((sum, score) => sum + score, 0n),
+        weekTraders: feesOf(week).size,
       };
       return Promise.resolve({ value: state });
     },
@@ -247,6 +248,8 @@ export function memoryRewardsStorage() {
       }
       return Promise.resolve({ value: null });
     },
+
+    traders: (week) => Promise.resolve({ value: feesOf(week).size }),
   };
 
   return {
