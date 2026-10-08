@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Relay } from "../../src/common/core/relay.js";
@@ -19,6 +19,7 @@ import { splitPoints, weeklyScores, type Scorer } from "../support/rewards.js";
  */
 
 const MIGRATION = "supabase/migrations/20261008120000_rewards.sql";
+const APPLIED_FROM = "../app-noirwire/supabase/migrations/20261008120000_rewards.sql";
 const TABLES = [
   "rewards_members",
   "rewards_week_fees",
@@ -155,6 +156,15 @@ afterAll(() => db.close());
 beforeEach(async () => {
   await db.exec(`reset role; truncate ${TABLES.map((table) => `public.${table}`).join(", ")}`);
   await db.exec("set role service_role");
+});
+
+describe("the migration this suite runs", () => {
+  it.skipIf(!existsSync(APPLIED_FROM))(
+    "is the same file the app repository applies to the project",
+    () => {
+      expect(readFileSync(MIGRATION, "utf8")).toBe(readFileSync(APPLIED_FROM, "utf8"));
+    },
+  );
 });
 
 describe("rewards_join", () => {
