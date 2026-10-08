@@ -89,7 +89,7 @@ const DESCRIPTION = [
   "| `GET /v1/profile/config` | No | Nobody |",
   "| `POST /v1/rewards/claims` | Yes: the portfolio that traded, next to the rewards key | The RPC provider, which is sent the transaction's id alone. The portfolio is checked and dropped |",
   "| `POST /v1/rewards/join`, `POST /v1/rewards/state` | No: a rewards key is derived for rewards alone, never a wallet's | NoirWire's database |",
-  "| `GET /v1/rewards/config` | No | Nobody |",
+  "| `GET /v1/rewards/config` | No | NoirWire's database, asked by this server at most once a minute for one count, with nothing of the caller |",
   "| `GET /v1/prices`, `GET /v1/history/...` | No | Jupiter, asked by this server on its own schedule, not per caller |",
   "| `POST /v1/events` | No: the closed event list has no field for one | NoirWire's analytics server |",
   "| `POST /v1/session`, `POST /v1/session/refresh` | No | The identity provider (Supabase Auth), asked by this server |",

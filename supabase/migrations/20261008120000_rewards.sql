@@ -169,6 +169,18 @@ begin
 end;
 $$;
 
+-- How many members have a fee credited in one week. A member has one row
+-- per week however many trades they claimed in it, and no row holds a fee
+-- of zero, so this is a count of members and says nothing of any of them.
+create function public.rewards_week_traders(p_week integer)
+returns integer
+language sql
+stable
+set search_path = ''
+as $$
+  select count(*)::integer from public.rewards_week_fees f where f.week = p_week
+$$;
+
 -- A member as of one week, or null when the key has not joined. Outside the
 -- season p_week is null: it matches no row, so the week's amounts are zero
 -- and the points are returned all the same. Amounts are text, so that none
@@ -205,7 +217,8 @@ as $$
     ),
     'week_total_score', (
       select coalesce(sum(s.score), 0)::text from public.rewards_scores(p_week) s
-    )
+    ),
+    'week_traders', public.rewards_week_traders(p_week)
   )
   from public.rewards_members m
   where m.rewards_key = p_rewards_key
@@ -294,6 +307,7 @@ $$;
 
 revoke execute on function
   public.rewards_scores (integer),
+  public.rewards_week_traders (integer),
   public.rewards_join (text, text, text, integer, integer, integer),
   public.rewards_state (text, integer),
   public.rewards_credit (text, text, integer, bigint),
@@ -302,6 +316,7 @@ from public, anon, authenticated;
 
 grant execute on function
   public.rewards_scores (integer),
+  public.rewards_week_traders (integer),
   public.rewards_join (text, text, text, integer, integer, integer),
   public.rewards_state (text, integer),
   public.rewards_credit (text, text, integer, bigint),

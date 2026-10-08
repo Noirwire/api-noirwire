@@ -107,6 +107,7 @@ describe("the rewards database", () => {
       week_fee_micro_usdc: "9007199254740993",
       week_score: "12000",
       week_total_score: "23000",
+      week_traders: 48,
     };
     const found = await setup(() => Response.json(row)).database.state(rewardsKey, 2);
     expect(found).toEqual({
@@ -119,6 +120,7 @@ describe("the rewards database", () => {
         weekFeeMicroUsdc: 9_007_199_254_740_993n,
         weekScore: 12_000n,
         weekTotalScore: 23_000n,
+        weekTraders: 48,
       },
     });
     const none = await setup(() => Response.json(null)).database.state(rewardsKey, 2);

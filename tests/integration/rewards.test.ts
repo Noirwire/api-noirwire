@@ -67,6 +67,7 @@ function database(store: MemoryRewards) {
         week_fee_micro_usdc: member.weekFeeMicroUsdc.toString(),
         week_score: member.weekScore.toString(),
         week_total_score: member.weekTotalScore.toString(),
+        week_traders: member.weekTraders,
       };
       return { body: JSON.stringify(row), headers: JSON_REPLY };
     }
@@ -78,6 +79,10 @@ function database(store: MemoryRewards) {
         feeMicroUsdc: BigInt(args.p_fee_micro_usdc),
       });
       return { body: JSON.stringify(value(credited)), headers: JSON_REPLY };
+    }
+    if (name === "rewards_week_traders") {
+      const traders = value(await store.storage.traders(args.p_week));
+      return { body: JSON.stringify(traders), headers: JSON_REPLY };
     }
     if (name === "rewards_settle") {
       await store.storage.settle(args.p_weeks, args.p_weekly_points);
@@ -178,8 +183,15 @@ describe("the rewards routes", () => {
     Object.keys(response.json),
   ];
 
-  it("GET /v1/rewards/config states the season in ISO 8601, and asks nobody", async () => {
-    const response = await api.call("/v1/rewards/config");
+  it("GET /v1/rewards/config states the season in ISO 8601 and this week's traders, and asks the database for the count alone", async () => {
+    const member = Keypair.generate();
+    const portfolio = Keypair.generate();
+    await join(member);
+    await claim(member, portfolio, landed(portfolio));
+    api.providers.received.length = 0;
+
+    const token = await api.token();
+    const response = await api.call("/v1/rewards/config", { token, ip: "203.0.113.9" });
     expect([response.status, response.json]).toEqual([
       200,
       {
@@ -187,9 +199,18 @@ describe("the rewards routes", () => {
         seasonStart: new Date(SEASON_START_MS).toISOString(),
         seasonWeeks: 12,
         weeklyPoints: 100_000,
+        tradersThisWeek: 1,
       },
     ]);
-    expect(api.providers.received).toHaveLength(0);
+    expect(api.providers.received.map((sent) => [sent.provider, sent.path, sent.body])).toEqual([
+      ["supabase", "/rest/v1/rpc/rewards_week_traders", '{"p_week":2}'],
+    ]);
+    expect(JSON.stringify(api.providers.received)).not.toContain(token);
+
+    // Answered again from this server's memory: the database is not asked twice in a minute.
+    expect((await api.call("/v1/rewards/config")).json.tradersThisWeek).toBe(1);
+    expect(api.providers.received).toHaveLength(1);
+    expect((await state(member)).json.week.traders).toBe(1);
   });
 
   it("POST /v1/rewards/join makes a member, with the database key in both headers and nothing of the caller", async () => {
@@ -217,6 +238,7 @@ describe("the rewards routes", () => {
         endsAt: new Date(SEASON_START_MS + 3 * WEEK_MS).toISOString(),
         feeMicroUsdc: "0",
         shareBps: 0,
+        traders: 0,
       },
     });
 
@@ -483,6 +505,28 @@ describe("a deployment that takes one new member a day", () => {
   });
 });
 
+describe("a deployment whose database is down", () => {
+  let api: Api;
+
+  beforeAll(async () => {
+    api = await startApi(ENV);
+    api.providers.answer("supabase", (request) =>
+      request.path.startsWith("/rest/")
+        ? { status: 503, body: "upstream connect error" }
+        : api.providers.defaults.supabase(request),
+    );
+  });
+  afterAll(() => api.close());
+
+  it("still says rewards are on, with no count of traders, and passes on none of the database's words", async () => {
+    const response = await api.call("/v1/rewards/config");
+    expect(response.status).toBe(200);
+    expect(response.json).toMatchObject({ enabled: true, weeklyPoints: 100_000 });
+    expect(response.json.tradersThisWeek).toBeNull();
+    expect(response.text).not.toContain("upstream connect error");
+  });
+});
+
 describe("a deployment with no rewards configuration", () => {
   let api: Api;
 
@@ -496,7 +540,13 @@ describe("a deployment with no rewards configuration", () => {
     const config = await api.call("/v1/rewards/config");
     expect([config.status, config.json]).toEqual([
       200,
-      { enabled: false, seasonStart: null, seasonWeeks: null, weeklyPoints: null },
+      {
+        enabled: false,
+        seasonStart: null,
+        seasonWeeks: null,
+        weeklyPoints: null,
+        tradersThisWeek: null,
+      },
     ]);
 
     const member = Keypair.generate();

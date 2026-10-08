@@ -32,7 +32,13 @@ const EXAMPLE_STATE = {
   invited: 2,
   wasInvited: false,
   points: "1250",
-  week: { index: 3, endsAt: "2026-11-09T00:00:00.000Z", feeMicroUsdc: "61000", shareBps: 125 },
+  week: {
+    index: 3,
+    endsAt: "2026-11-09T00:00:00.000Z",
+    feeMicroUsdc: "61000",
+    shareBps: 125,
+    traders: 48,
+  },
 };
 
 const WHAT_REWARDS_ARE = `Rewards are points for trades, for a wallet that asks for them. Each week of a ${SEASON_WEEKS} week season, ${WEEKLY_POINTS.toLocaleString("en-US")} points are split between the members by the trading fees their claimed trades paid NoirWire that week. A wallet that never joins sends nothing here, and works the same.`;
@@ -87,7 +93,7 @@ const STATE = {
       nullable: true,
       description:
         "The running week, or null outside the season: before week 0 begins and once the last week has ended. The points are returned either way.",
-      required: ["index", "endsAt", "feeMicroUsdc", "shareBps"],
+      required: ["index", "endsAt", "feeMicroUsdc", "shareBps", "traders"],
       properties: {
         index: {
           type: "integer",
@@ -106,6 +112,11 @@ const STATE = {
           type: "integer",
           description:
             "The member's share of that week's points as it stands, in hundredths of a percent, rounded down. An estimate: it moves with every claim, anyone's, until the week is settled.",
+        },
+        traders: {
+          type: "integer",
+          description:
+            "How many members have a fee credited in that week, this member included once they have one. A count, read as the request is answered: nothing of who they are or what they paid.",
         },
       },
     },
@@ -176,7 +187,9 @@ export class RewardsController {
       "",
       "**Who calls it:** the wallets, before they show anything of rewards.",
       "",
-      "**Contains wallet addresses: no.** Nothing is read from the database for this request.",
+      "`tradersThisWeek` is how many members have a fee credited in the running week, so that a wallet can show how early a member would be. It is a count and nothing else: no member, no fee, no total. This server reads it from the database at most once in 60 seconds and answers everyone with that reading in between, so it can be up to a minute old. When the database gives no answer it is null and the rest of the answer is unchanged: whether rewards are on never depends on the database.",
+      "",
+      "**Contains wallet addresses: no.** Nothing of the caller is sent to the database for this request, and nothing is stored.",
       "",
       QUOTAS,
     ].join("\n"),
@@ -185,7 +198,7 @@ export class RewardsController {
     "The season, or that there are no rewards here.",
     {
       type: "object",
-      required: ["enabled", "seasonStart", "seasonWeeks", "weeklyPoints"],
+      required: ["enabled", "seasonStart", "seasonWeeks", "weeklyPoints", "tradersThisWeek"],
       properties: {
         enabled: {
           type: "boolean",
@@ -208,6 +221,12 @@ export class RewardsController {
           nullable: true,
           description: "The points one week splits between its members.",
         },
+        tradersThisWeek: {
+          type: "integer",
+          nullable: true,
+          description:
+            "How many members have a fee credited in the running week. Up to 60 seconds old. Null when rewards are off, outside the season (before week 0 begins and once the last week has ended), and when the database gave no answer.",
+        },
       },
     },
     {
@@ -218,11 +237,18 @@ export class RewardsController {
           seasonStart: "2026-10-19T00:00:00.000Z",
           seasonWeeks: SEASON_WEEKS,
           weeklyPoints: WEEKLY_POINTS,
+          tradersThisWeek: 48,
         },
       },
       off: {
         summary: "No rewards",
-        value: { enabled: false, seasonStart: null, seasonWeeks: null, weeklyPoints: null },
+        value: {
+          enabled: false,
+          seasonStart: null,
+          seasonWeeks: null,
+          weeklyPoints: null,
+          tradersThisWeek: null,
+        },
       },
     },
   )
@@ -230,7 +256,7 @@ export class RewardsController {
   async season(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
     const admitted = await this.admission.forSession(req, { ...RULE, maxBodyBytes: 0 });
     if ("refused" in admitted) return send(res, admitted.refused);
-    send(res, this.rewards.config());
+    send(res, await this.rewards.config());
   }
 
   @Post("join")

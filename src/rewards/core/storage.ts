@@ -48,6 +48,8 @@ export type MemberState = {
   /** The member's score in that week and every member's together, in the same unit as each other. */
   weekScore: bigint;
   weekTotalScore: bigint;
+  /** How many members have a fee credited in that week. */
+  weekTraders: number;
 };
 
 export type Credit = {
@@ -72,4 +74,6 @@ export type RewardsStorage = {
   credit(credit: Credit): Promise<Stored<Credited>>;
   /** Hands out `weeklyPoints` for each of the first `weeks` weeks that has not been settled. Settling twice changes nothing. */
   settle(weeks: number, weeklyPoints: number): Promise<Stored<null>>;
+  /** How many members have a fee credited in `week`: a count, and nothing of who. */
+  traders(week: number): Promise<Stored<number>>;
 };

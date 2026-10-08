@@ -55,6 +55,8 @@ export const CLAIM_LIMITS: RouteLimits = { perSession: 12, perIp: 120, total: 24
 export const CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
 export const CODE_LENGTH = 8;
 const DAY_MS = 24 * 3_600_000;
+/** How long one count of the week's traders is answered with. */
+export const TRADERS_TTL_MS = 60_000;
 /** How many codes are tried for a new member before giving up: two members drawing one code is already a rare thing. */
 const CODE_ATTEMPTS = 3;
 
@@ -119,8 +121,8 @@ export type RewardsDeps = {
 };
 
 export type Rewards = {
-  /** Whether points are handed out here, and the season's shape. */
-  config(): Answer;
+  /** Whether points are handed out here, the season's shape, and how many members traded this week. */
+  config(): Promise<Answer>;
   join(body: string): Promise<Answer>;
   state(body: string): Promise<Answer>;
   claim(body: string, caller: Caller): Promise<Answer>;
@@ -175,6 +177,7 @@ export function createRewards(deps: RewardsDeps): Rewards {
               endsAt: new Date(weekEndsAt(seasonStartMs, week)).toISOString(),
               feeMicroUsdc: member.weekFeeMicroUsdc.toString(),
               shareBps: shareBps(member.weekScore, member.weekTotalScore),
+              traders: member.weekTraders,
             },
     };
   }
@@ -203,8 +206,28 @@ export function createRewards(deps: RewardsDeps): Rewards {
       : failed("signature_invalid");
   }
 
+  /** The last count of the running week's traders, and when and for which week it was asked for. */
+  let counted: { week: number; at: number; traders: Promise<number | null> } | null = null;
+
+  /**
+   * How many members have a fee credited in the running week, or null
+   * outside the season. Every wallet asks, joined or not, so the database is
+   * asked once a minute at most and everyone in between is told the same.
+   * When the database gives no answer the count is null, for that minute
+   * too: whether rewards are on never depends on the database being up.
+   */
+  function tradersThisWeek({ storage, seasonStartMs }: RewardsUpstream): Promise<number | null> {
+    const week = seasonWeekAt(seasonStartMs, now());
+    if (week === null) return Promise.resolve(null);
+    if (counted?.week !== week || now() - counted.at >= TRADERS_TTL_MS) {
+      const traders = storage.traders(week).then((read) => ("failed" in read ? null : read.value));
+      counted = { week, at: now(), traders };
+    }
+    return counted.traders;
+  }
+
   return {
-    config() {
+    async config() {
       return answer(
         200,
         upstream
@@ -213,8 +236,15 @@ export function createRewards(deps: RewardsDeps): Rewards {
               seasonStart: new Date(upstream.seasonStartMs).toISOString(),
               seasonWeeks: SEASON_WEEKS,
               weeklyPoints: WEEKLY_POINTS,
+              tradersThisWeek: await tradersThisWeek(upstream),
             }
-          : { enabled: false, seasonStart: null, seasonWeeks: null, weeklyPoints: null },
+          : {
+              enabled: false,
+              seasonStart: null,
+              seasonWeeks: null,
+              weeklyPoints: null,
+              tradersThisWeek: null,
+            },
       );
     },
 
