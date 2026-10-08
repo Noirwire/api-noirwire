@@ -14,7 +14,7 @@ import type { Caller, RouteLimits } from "../../common/core/quota.js";
 import { readClaim } from "./claim.js";
 import { REWARDS_ROUTE } from "./database.js";
 import { rewardsMessage, signatureVerifies, timely } from "./messages.js";
-import { shareBps, WEEKLY_POINTS } from "./points.js";
+import { boostWeeksLeft, shareBps, WEEKLY_POINTS } from "./points.js";
 import type { MemberState, RewardsStorage } from "./storage.js";
 import type { Transactions } from "./transactions.js";
 import { closedWeeks, SEASON_WEEKS, seasonWeekAt, weekAt, weekEndsAt } from "./weeks.js";
@@ -168,6 +168,12 @@ export function createRewards(deps: RewardsDeps): Rewards {
       codeActive: member.codeActive,
       invited: member.invited,
       wasInvited: member.wasInvited,
+      // Outside the season the weeks are still counted from where the clock is, never from before week 0.
+      boostWeeksLeft: boostWeeksLeft(
+        member.wasInvited,
+        member.joinedWeek,
+        Math.max(0, weekAt(seasonStartMs, now())),
+      ),
       points: member.points.toString(),
       week:
         week === null

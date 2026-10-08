@@ -41,6 +41,8 @@ export type MemberState = {
   /** How many members joined with this member's code. */
   invited: number;
   wasInvited: boolean;
+  /** The week the member joined in, counted from the season start. */
+  joinedWeek: number;
   /** Settled points. */
   points: bigint;
   /** The member's fees in the week asked about, in micro-USDC. */

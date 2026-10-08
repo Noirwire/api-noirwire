@@ -31,6 +31,7 @@ const EXAMPLE_STATE = {
   codeActive: true,
   invited: 2,
   wasInvited: false,
+  boostWeeksLeft: 0,
   points: "1250",
   week: {
     index: 3,
@@ -71,7 +72,7 @@ const signatureOf = (what: string) => ({
 
 const STATE = {
   type: "object",
-  required: ["code", "codeActive", "invited", "wasInvited", "points", "week"],
+  required: ["code", "codeActive", "invited", "wasInvited", "boostWeeksLeft", "points", "week"],
   properties: {
     code: {
       type: "string",
@@ -84,6 +85,10 @@ const STATE = {
     },
     invited: { type: "integer", description: "How many members joined with this member's code." },
     wasInvited: { type: "boolean", description: "Whether the member joined with someone's code." },
+    boostWeeksLeft: {
+      type: "integer",
+      description: `For a member who joined with someone's code, how many weeks their own fees still count 1.1 times, the running week included: ${INVITED_BONUS_WEEKS} in the week they joined in, 1 in the last such week, 0 after. Always 0 for a member who joined without a code. From 0 to ${INVITED_BONUS_WEEKS}. Before the season starts it is counted as of week 0.`,
+    },
     points: {
       type: "string",
       description: "The member's points from every settled week: a whole number, as a string.",

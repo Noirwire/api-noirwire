@@ -219,6 +219,7 @@ export function memoryRewardsStorage() {
         codeActive: active(rewardsKey),
         invited: [...members.values()].filter((other) => other.invitedBy === rewardsKey).length,
         wasInvited: member.invitedBy !== null,
+        joinedWeek: member.joinedWeek,
         points: [...points.values()].reduce((sum, week) => sum + (week.get(rewardsKey) ?? 0n), 0n),
         weekFeeMicroUsdc: feesOf(week).get(rewardsKey) ?? 0n,
         weekScore: scores.get(rewardsKey) ?? 0n,

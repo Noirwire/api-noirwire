@@ -3,6 +3,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { Relay } from "../../src/common/core/relay.js";
 import { createRewardsDatabase } from "../../src/rewards/core/database.js";
+import { boostWeeksLeft } from "../../src/rewards/core/points.js";
 import type { RewardsStorage, Stored } from "../../src/rewards/core/storage.js";
 import { splitPoints, weeklyScores, type Scorer } from "../support/rewards.js";
 
@@ -301,6 +302,28 @@ describe("rewards_settle", () => {
     expect(await pointsOf(4)).toEqual({ alice: 15_384n, bob: 84_615n });
   });
 
+  it("stops the bonus in the very week a member is told they have no weeks of it left", async () => {
+    await join("alice", "AAAAAAAA");
+    await traded("alice", 0, 1n);
+    await join("bob", "BBBBBBBB", "AAAAAAAA", { week: 3 });
+    await join("carol", "CCCCCCCC");
+    for (let week = 3; week < 12; week += 1) {
+      await traded("bob", week, 1_000n);
+      await traded("carol", week, 1_000n);
+    }
+    await settle(12);
+
+    // Bob and Carol paid the same every week: he is ahead of her exactly while his fees count 1.1 times.
+    const bob = await state("bob", null);
+    for (let week = 3; week < 12; week += 1) {
+      const points = await pointsOf(week);
+      const told = boostWeeksLeft(bob?.wasInvited ?? false, bob?.joinedWeek ?? 0, week);
+      expect(points.bob > points.carol, `week ${week}`).toBe(told > 0);
+    }
+    expect(boostWeeksLeft(true, bob?.joinedWeek ?? 0, 10)).toBe(1);
+    expect(boostWeeksLeft(true, bob?.joinedWeek ?? 0, 11)).toBe(0);
+  });
+
   it("gives no bonus to a member who joined without a code", async () => {
     await join("alice", "AAAAAAAA");
     await join("bob", "BBBBBBBB");
@@ -401,6 +424,7 @@ describe("rewards_state", () => {
       codeActive: true,
       invited: 0,
       wasInvited: false,
+      joinedWeek: 0,
       points: 100_000n,
       weekFeeMicroUsdc: 300n,
       weekScore: 3_000n,
