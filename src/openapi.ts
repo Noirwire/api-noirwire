@@ -39,7 +39,7 @@ const MEANING: Record<ErrorCode, string> = {
   no_referral_fee:
     "No USDC reached NoirWire's referral account in the claimed transaction. Nothing was credited.",
   outside_claim_window:
-    "The claimed trade was made outside the season, or its week ended more than 24 hours ago.",
+    "The claimed trade was made before rewards started, or its week ended more than 24 hours ago.",
   rate_limited:
     "A quota is spent, or a provider is rate limiting. Nothing was done. Retry with backoff.",
   internal_error: "An unexpected failure in this API.",

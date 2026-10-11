@@ -105,7 +105,15 @@ const credit = async (
       countedMicroUsdc: counted,
     }),
   );
-const settle = async (weeks: number) => done(await storage.settle(weeks, POT));
+/**
+ * `rewards_settle` is called directly, by name, rather than through
+ * `storage`: the application no longer calls it at all (rewards are in a
+ * preview, with no route that hands out points), but the function itself is
+ * untouched and this suite still holds it to its rules.
+ */
+const settle = async (weeks: number) => {
+  await rows("select public.rewards_settle($1, $2)", [weeks, POT]);
+};
 const totals = async (week: number | null) => done(await storage.totals(week));
 const traders = async (week: number) => (await totals(week)).weekTraders;
 const state = async (rewardsKey: string, week: number | null) =>

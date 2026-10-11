@@ -145,12 +145,6 @@ describe("the rewards database", () => {
     ]);
   });
 
-  it("takes a settlement that answers with no body", async () => {
-    const { database, sent } = setup(() => new Response(null, { status: 204 }));
-    expect(await database.settle(3, 100_000)).toEqual({ value: null });
-    expect(sent[0].body).toEqual({ p_weeks: 3, p_weekly_points: 100_000 });
-  });
-
   it("answers the database's own error as a 502, and an answer of another shape too", async () => {
     const refused = setup(() =>
       Response.json(

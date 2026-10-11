@@ -10,7 +10,7 @@ import type { Config } from "../config/core/config.js";
 import { CONFIG, REWARDS } from "../tokens.js";
 import { REWARDS_ROUTE } from "./core/database.js";
 import { MAX_CLOCK_DRIFT_SECONDS } from "./core/messages.js";
-import { INVITED_BONUS_WEEKS, WEEKLY_POINTS } from "./core/points.js";
+import { INVITED_BONUS_WEEKS } from "./core/points.js";
 import {
   CLAIM_LIMITS,
   CLAIM_ROUTE,
@@ -19,7 +19,6 @@ import {
   REWARDS_MAX_BODY_BYTES,
   type Rewards,
 } from "./core/rewards.js";
-import { SEASON_WEEKS } from "./core/weeks.js";
 
 const RULE = { route: REWARDS_ROUTE, limits: REWARDS_LIMITS };
 const CLAIM_RULE = { route: CLAIM_ROUTE, limits: CLAIM_LIMITS };
@@ -43,7 +42,7 @@ const EXAMPLE_STATE = {
   },
 };
 
-const WHAT_REWARDS_ARE = `Rewards are points for trades, for a wallet that asks for them. Each week of a ${SEASON_WEEKS} week season, ${WEEKLY_POINTS.toLocaleString("en-US")} points are split between the members by the trading fees their claimed trades paid NoirWire that week. A wallet that never joins sends nothing here, and works the same.`;
+const WHAT_REWARDS_ARE = `Rewards are in a preview: no points are handed out. A wallet that joins has the trading fees its claimed trades paid NoirWire recorded week by week, counted from when this deployment's rewards started with no end, for when points are turned on. A wallet that never joins sends nothing here, and works the same.`;
 
 const THE_REWARDS_KEY =
   "A member is a rewards key: an ed25519 key the wallet derives from the recovery phrase for this alone. It is not a Solana account and holds nothing. It is never the profile key, the funding wallet's key or a portfolio's.";
@@ -102,22 +101,23 @@ const STATE = {
     wasInvited: { type: "boolean", description: "Whether the member joined with someone's code." },
     boostWeeksLeft: {
       type: "integer",
-      description: `For a member who joined with someone's code, how many weeks their own fees still count 1.1 times, the running week included: ${INVITED_BONUS_WEEKS} in the week they joined in, 1 in the last such week, 0 after. Always 0 for a member who joined without a code. From 0 to ${INVITED_BONUS_WEEKS}. Before the season starts it is counted as of week 0.`,
+      description: `For a member who joined with someone's code, how many weeks their own fees still count 1.1 times, the running week included: ${INVITED_BONUS_WEEKS} in the week they joined in, 1 in the last such week, 0 after. Always 0 for a member who joined without a code. From 0 to ${INVITED_BONUS_WEEKS}. Before the configured start it is counted as of week 0.`,
     },
     points: {
       type: "string",
-      description: "The member's points from every settled week: a whole number, as a string.",
+      description:
+        'The sum of the member\'s points from every settled week, as a whole number string: "0" while this deployment is in preview and hands out none.',
     },
     week: {
       type: "object",
       nullable: true,
       description:
-        "The running week, or null outside the season: before week 0 begins and once the last week has ended. The points are returned either way.",
+        "The running week, or null before week 0 begins. Weeks are counted from the configured start with no end, so the fees recorded in them are returned either way.",
       required: ["index", "endsAt", "feeMicroUsdc", "shareBps", "traders"],
       properties: {
         index: {
           type: "integer",
-          description: `Which week of the season is running, from 0 to ${SEASON_WEEKS - 1}.`,
+          description: "Which week since the configured start is running, from 0 with no end.",
         },
         endsAt: {
           type: "string",
@@ -144,7 +144,7 @@ const STATE = {
 };
 
 const OFF = {
-  why: "This deployment hands out no points (`GET /v1/rewards/config` says `enabled: false`), so this route is not there.",
+  why: "This deployment does not record rewards at all (`GET /v1/rewards/config` says `enabled: false`), so this route is not there.",
   codes: { not_found: "Rewards are not configured" },
 } as const;
 
@@ -199,19 +199,19 @@ export class RewardsController {
 
   @Get("config")
   @ApiOperation({
-    summary: "Whether points are handed out here, and the season's shape",
+    summary: "Whether rewards are recorded here, in preview",
     description: [
       WHAT_REWARDS_ARE,
       "",
-      "Says whether this deployment hands out points and, when it does, when the season starts, how many weeks it lasts and how many points a week splits. These come from this server's own configuration. When `enabled` is false every other rewards route answers `404`, and a wallet shows nothing of rewards.",
+      "Says whether this deployment records rewards and, when it does, when the weeks it counts them in started. These come from this server's own configuration. When `enabled` is false every other rewards route answers `404`, and a wallet shows nothing of rewards.",
       "",
       "**Who calls it:** the wallets, before they show anything of rewards.",
       "",
       "`tradersThisWeek` is how many members have a fee credited in the running week, so that a wallet can show how early a member would be. It is a count and nothing else: no member, no fee, no total. This server reads it from the database at most once in 60 seconds and answers everyone with that reading in between, so it can be up to a minute old. When the database gives no answer it is null and the rest of the answer is unchanged: whether rewards are on never depends on the database.",
       "",
-      "`members` is how many keys have joined, read and kept the same way and in the same read. It is answered outside the season too, since joining is open then.",
+      "`members` is how many keys have joined, read and kept the same way and in the same read. It is answered before the start too, since joining is open then.",
       "",
-      "`doubleHour` is the one hour, when this deployment has one, in which a trade's fee counts twice toward its member's score for that week. It comes from this server's configuration. Whether a trade falls in it is decided by this server from the block the chain put the trade in, from `startsAt` up to but not at `endsAt`, and never from anything a wallet sends. The week still splits the same points.",
+      "`doubleHour` is the one hour, when this deployment has one, in which a trade's fee counts twice toward its member's score for that week. It comes from this server's configuration. Whether a trade falls in it is decided by this server from the block the chain put the trade in, from `startsAt` up to but not at `endsAt`, and never from anything a wallet sends.",
       "",
       "**Contains wallet addresses: no.** Nothing of the caller is sent to the database for this request, and nothing is stored.",
       "",
@@ -219,45 +219,27 @@ export class RewardsController {
     ].join("\n"),
   })
   @ok(
-    "The season, or that there are no rewards here.",
+    "Whether rewards are recorded here, or that there are none.",
     {
       type: "object",
-      required: [
-        "enabled",
-        "seasonStart",
-        "seasonWeeks",
-        "weeklyPoints",
-        "members",
-        "tradersThisWeek",
-        "doubleHour",
-      ],
+      required: ["enabled", "seasonStart", "members", "tradersThisWeek", "doubleHour"],
       properties: {
         enabled: {
           type: "boolean",
           description:
-            "Whether this deployment hands out points. When false, the other fields are null.",
+            "Whether this deployment records rewards. When false, the other fields are null.",
         },
         seasonStart: {
           type: "string",
           nullable: true,
           description:
-            "When week 0 begins: a Monday, 00:00 UTC, as an ISO 8601 date and time. Weeks run Monday to Monday.",
-        },
-        seasonWeeks: {
-          type: "integer",
-          nullable: true,
-          description: "How many weeks the season lasts. A trade outside them earns nothing.",
-        },
-        weeklyPoints: {
-          type: "integer",
-          nullable: true,
-          description: "The points one week splits between its members.",
+            "When week 0 begins: a Monday, 00:00 UTC, as an ISO 8601 date and time. Weeks run Monday to Monday, counted from here with no end.",
         },
         members: {
           type: "integer",
           nullable: true,
           description:
-            "How many keys have joined, in all. Up to 60 seconds old. Answered outside the season too. Null when rewards are off, and when the database gave no answer.",
+            "How many keys have joined, in all. Up to 60 seconds old. Answered before the start too. Null when rewards are off, and when the database gave no answer.",
         },
         doubleHour: {
           type: "object",
@@ -281,18 +263,16 @@ export class RewardsController {
           type: "integer",
           nullable: true,
           description:
-            "How many members have a fee credited in the running week. Up to 60 seconds old. Null when rewards are off, outside the season (before week 0 begins and once the last week has ended), and when the database gave no answer.",
+            "How many members have a fee credited in the running week. Up to 60 seconds old. Null when rewards are off, before the start, and when the database gave no answer.",
         },
       },
     },
     {
       enabled: {
-        summary: "Points are handed out here",
+        summary: "Rewards are recorded here, in preview",
         value: {
           enabled: true,
           seasonStart: "2026-10-19T00:00:00.000Z",
-          seasonWeeks: SEASON_WEEKS,
-          weeklyPoints: WEEKLY_POINTS,
           members: 317,
           tradersThisWeek: 48,
           doubleHour: null,
@@ -303,8 +283,6 @@ export class RewardsController {
         value: {
           enabled: true,
           seasonStart: "2026-10-19T00:00:00.000Z",
-          seasonWeeks: SEASON_WEEKS,
-          weeklyPoints: WEEKLY_POINTS,
           members: 317,
           tradersThisWeek: 48,
           doubleHour: {
@@ -318,8 +296,6 @@ export class RewardsController {
         value: {
           enabled: false,
           seasonStart: null,
-          seasonWeeks: null,
-          weeklyPoints: null,
           members: null,
           tradersThisWeek: null,
           doubleHour: null,
@@ -420,14 +396,14 @@ export class RewardsController {
   @ApiOperation({
     summary: "Read a member's state",
     description: [
-      "The member's code, how many joined with it, the points from settled weeks, and the running week as it stands.",
+      'The member\'s code, how many joined with it, the points from settled weeks (`"0"` while this deployment is in preview), and the running week as it stands.',
       "",
       "**Who calls it:** the wallets, when the rewards screen opens.",
       "",
       "**Signed.** `signature` is the rewards key's over these four lines, joined by a line feed and with none after the last: `NoirWire rewards v1`, `state`, the rewards key, `at` in decimal. " +
         SIGNED_TIME,
       "",
-      `**How points come about.** A member's score for a week is the fees of their own claimed trades (a trade made in the double hour counted twice, see \`GET /v1/rewards/config\`), times 1.1 while they are a member who joined with a code and within ${INVITED_BONUS_WEEKS} weeks of the week they joined in, plus 0.2 of the fees of the members who joined with their code. A trade made in a week before its member joined, and claimed after, counts once and earns the inviter nothing. A week is settled once, on the first request that reaches this server more than 24 hours after it ended: its ${WEEKLY_POINTS.toLocaleString("en-US")} points are split by score, each share rounded down. A week with no fees hands out nothing.`,
+      `**How recorded fees will be weighed.** Rewards are in a preview: no points are handed out here. A member's trade fees are still recorded per week, and these are the scoring rules a week's recorded fees will be weighed by once points are turned on. A member's score for a week is the fees of their own claimed trades (a trade made in the double hour counted twice, see \`GET /v1/rewards/config\`), times 1.1 while they are a member who joined with a code and within ${INVITED_BONUS_WEEKS} weeks of the week they joined in, plus 0.2 of the fees of the members who joined with their code. A trade made in a week before its member joined, and claimed after, counts once and earns the inviter nothing.`,
       "",
       NO_WALLET_ADDRESS,
       "",
@@ -455,7 +431,7 @@ export class RewardsController {
   })
   @errors("The body is not JSON, or is not exactly `{ rewardsKey, at, signature }`.", {
     404: {
-      why: "The rewards key has not joined. Also answered, as `not_found`, where this deployment hands out no points.",
+      why: "The rewards key has not joined. Also answered, as `not_found`, where this deployment does not record rewards at all.",
       codes: { not_a_member: "The key has not joined", ...OFF.codes },
     },
     403: UNSIGNED,
@@ -479,7 +455,7 @@ export class RewardsController {
       "- It is finalized, under exactly this id, and it succeeded.",
       "- `portfolio` is one of its signers.",
       "- The USDC token account of NoirWire's referral account holds more after it than before, by the transaction's own token balances. That increase is the fee.",
-      "- Its block time is inside the season, and no more than 24 hours have passed since the week it falls in ended.",
+      "- Its block time is at or after the configured start, and no more than 24 hours have passed since the week it falls in ended.",
       "",
       "**A trade is credited once**, whoever claims it. A second claim of the same transaction is answered `409 already_claimed` and changes nothing.",
       "",
@@ -555,7 +531,7 @@ export class RewardsController {
     "The body is not JSON, is not exactly `{ rewardsKey, transaction, portfolio, portfolioSignature, rewardsSignature }`, or names one key as both the rewards key and the portfolio.",
     {
       404: {
-        why: "The rewards key has not joined. Also answered, as `not_found`, where this deployment hands out no points.",
+        why: "The rewards key has not joined. Also answered, as `not_found`, where this deployment does not record rewards at all.",
         codes: { not_a_member: "The key has not joined", ...OFF.codes },
       },
       409: {
@@ -573,7 +549,8 @@ export class RewardsController {
           transaction_failed: "The transaction failed on chain",
           not_a_signer: "The portfolio is not a signer of the transaction",
           no_referral_fee: "No USDC reached NoirWire's referral account in it",
-          outside_claim_window: "Outside the season, or its week closed more than 24 hours ago",
+          outside_claim_window:
+            "Before the configured start, or its week closed more than 24 hours ago",
         },
       },
     },

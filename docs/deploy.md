@@ -45,7 +45,7 @@ Rewards are off until the first four of these are set in the same Raw Editor (th
 ```
 REWARDS_DATABASE_SECRET_KEY=<the secret key of the Supabase project at SUPABASE_URL>
 REWARDS_FINGERPRINT_SECRET=<openssl rand -hex 32>
-REWARDS_SEASON_START=<the season's first day: a Monday, 00:00 UTC, such as 2026-10-19>
+REWARDS_SEASON_START=<week 0's first day: a Monday, 00:00 UTC, such as 2026-10-19>
 REWARDS_REFERRAL_ACCOUNT=<NoirWire's Jupiter referral account>
 REWARDS_DAILY_JOIN_CAP=<the most new members on one UTC day; 2000 when unset>
 REWARDS_DOUBLE_HOUR_START=<optional: when the double hour begins, with its offset, such as 2026-11-07T18:00:00Z>
@@ -53,7 +53,7 @@ REWARDS_DOUBLE_HOUR_START=<optional: when the double hour begins, with its offse
 
 Before setting them, apply the rewards migration to that project: it creates the rewards tables and the SQL functions this server calls. The project's migration history is kept in the `app-noirwire` repository, which holds the same file, so apply it from there (`npx supabase link`, then `npx supabase db push`). The copy in this repository's `supabase/migrations` is the one the tests execute; keep the two identical. The tables have row level security on and no policy, so only the secret key reaches them. Keep both secrets in Railway only, and seal the variables.
 
-Set `REWARDS_FINGERPRINT_SECRET` and `REWARDS_SEASON_START` once. A new fingerprint secret lets every trade already claimed be claimed again, and a new season start moves the weeks under fees already credited.
+Set `REWARDS_FINGERPRINT_SECRET` and `REWARDS_SEASON_START` once. A new fingerprint secret lets every trade already claimed be claimed again, and a new start moves the weeks under fees already credited. Rewards are in a preview while this ships: no points are handed out, but a member's trade fees are still recorded per week, counted from `REWARDS_SEASON_START` with no end.
 
 **The double hour.** `REWARDS_DOUBLE_HOUR_START` names one hour in which a trade's fee counts twice toward the week's score. Announce it before it happens, and set the variable and let the deploy finish before the hour starts: the multiplier is applied when a trade is claimed, from the trade's own block time and the value set at that moment, so a trade of the hour claimed while the variable is still unset counts once and stays so. Changing or removing the variable later rewrites nothing that was credited. `GET /v1/rewards/config` shows the hour the server has, which is the way to check it before announcing.
 
