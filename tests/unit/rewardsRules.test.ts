@@ -11,9 +11,8 @@ import {
 import { boostWeeksLeft, shareBps } from "../../src/rewards/core/points.js";
 import {
   claimOpen,
-  closedWeeks,
+  countedWeekAt,
   isWeekStart,
-  seasonWeekAt,
   weekAt,
   weekEndsAt,
 } from "../../src/rewards/core/weeks.js";
@@ -36,7 +35,7 @@ import {
 const START = SEASON_START_MS;
 const key = () => Keypair.generate().publicKey.toBase58();
 
-describe("the season's calendar", () => {
+describe("the counted weeks' calendar", () => {
   it("takes a week start only at a Monday, 00:00 UTC", () => {
     expect(isWeekStart(Date.UTC(2026, 9, 19))).toBe(true);
     expect(isWeekStart(Date.UTC(2026, 9, 20))).toBe(false);
@@ -53,24 +52,18 @@ describe("the season's calendar", () => {
     expect(weekEndsAt(START, 0)).toBe(START + WEEK_MS);
   });
 
-  it("has twelve weeks, and none before the start or after the last", () => {
-    expect(seasonWeekAt(START, START - 1)).toBeNull();
-    expect(seasonWeekAt(START, START + 12 * WEEK_MS - 1)).toBe(11);
-    expect(seasonWeekAt(START, START + 12 * WEEK_MS)).toBeNull();
+  it("has no week before the start, and keeps counting with no end after it", () => {
+    expect(countedWeekAt(START, START - 1)).toBeNull();
+    expect(countedWeekAt(START, START)).toBe(0);
+    expect(countedWeekAt(START, START + 12 * WEEK_MS - 1)).toBe(11);
+    expect(countedWeekAt(START, START + 12 * WEEK_MS)).toBe(12);
+    expect(countedWeekAt(START, START + 60 * WEEK_MS)).toBe(60);
   });
 
   it("keeps a week open for claims until 24 hours after it ends, and not a millisecond longer", () => {
     const closesAt = START + WEEK_MS + DAY_MS;
     expect(claimOpen(START, 0, closesAt - 1)).toBe(true);
     expect(claimOpen(START, 0, closesAt)).toBe(false);
-  });
-
-  it("counts a week as ready to settle exactly when its claims close, and never more than twelve", () => {
-    expect(closedWeeks(START, START - 30 * DAY_MS)).toBe(0);
-    expect(closedWeeks(START, START + WEEK_MS + DAY_MS - 1)).toBe(0);
-    expect(closedWeeks(START, START + WEEK_MS + DAY_MS)).toBe(1);
-    expect(closedWeeks(START, START + 5 * WEEK_MS)).toBe(4);
-    expect(closedWeeks(START, START + 40 * WEEK_MS)).toBe(12);
   });
 });
 
@@ -250,16 +243,24 @@ describe("the fee of a claimed trade", () => {
     expect(readClaim(free, terms)).toEqual({ ok: false, code: "no_referral_fee" });
   });
 
-  it("refuses a trade made before the season or after it, and one whose week closed over 24 hours ago", () => {
+  it("refuses a trade made before the start, and one whose week closed over 24 hours ago", () => {
     const outside = { ok: false, code: "outside_claim_window" };
     const at = (ms: number) => trade({ portfolio, blockTime: ms / 1_000 });
     expect(readClaim(at(START - 1_000), terms)).toEqual(outside);
-    expect(readClaim(at(START + 12 * WEEK_MS), { ...terms, nowMs: START + 12 * WEEK_MS })).toEqual(
-      outside,
-    );
 
     const lastMoment = START + 3 * WEEK_MS + DAY_MS - 1;
     expect(readClaim(genuine(), { ...terms, nowMs: lastMoment })).toMatchObject({ ok: true });
     expect(readClaim(genuine(), { ...terms, nowMs: lastMoment + 1 })).toEqual(outside);
+  });
+
+  it("credits a trade well past the twelfth week: weeks keep being counted with no end", () => {
+    const farMs = START + 60 * WEEK_MS;
+    const far = trade({ portfolio, blockTime: farMs / 1_000, feeMicroUsdc: 61_000n });
+    expect(readClaim(far, { ...terms, nowMs: farMs + DAY_MS - 1 })).toEqual({
+      ok: true,
+      week: 60,
+      feeMicroUsdc: 61_000n,
+      countedMicroUsdc: 61_000n,
+    });
   });
 });

@@ -150,9 +150,6 @@ export function createRewardsDatabase(deps: {
         credited,
       ),
 
-    settle: (weeks, weeklyPoints) =>
-      call("rewards_settle", { p_weeks: weeks, p_weekly_points: weeklyPoints }, z.null()),
-
     totals: (week) => call("rewards_totals", { p_week: week }, totals),
   };
 }

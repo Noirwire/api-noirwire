@@ -88,10 +88,6 @@ function database(store: MemoryRewards) {
       const row = totals && { members: totals.members, week_traders: totals.weekTraders };
       return { body: JSON.stringify(row), headers: JSON_REPLY };
     }
-    if (name === "rewards_settle") {
-      await store.storage.settle(args.p_weeks, args.p_weekly_points);
-      return { status: 204 };
-    }
     return { status: 404, body: { message: "no such function" } };
   };
 }
@@ -187,7 +183,7 @@ describe("the rewards routes", () => {
     Object.keys(response.json),
   ];
 
-  it("GET /v1/rewards/config states the season in ISO 8601 and this week's traders, and asks the database for the count alone", async () => {
+  it("GET /v1/rewards/config states the configured start in ISO 8601 and this week's traders, and asks the database for the count alone", async () => {
     const member = Keypair.generate();
     const portfolio = Keypair.generate();
     await join(member);
@@ -201,8 +197,6 @@ describe("the rewards routes", () => {
       {
         enabled: true,
         seasonStart: new Date(SEASON_START_MS).toISOString(),
-        seasonWeeks: 12,
-        weeklyPoints: 100_000,
         members: 1,
         tradersThisWeek: 1,
         doubleHour: null,
@@ -251,9 +245,7 @@ describe("the rewards routes", () => {
     });
 
     const calls = databaseCalls();
-    // Whichever request is the process's first also settles the weeks already closed.
-    const settle = "/rest/v1/rpc/rewards_settle";
-    expect(calls.map((call) => call.path).filter((path) => path !== settle)).toEqual([
+    expect(calls.map((call) => call.path)).toEqual([
       "/rest/v1/rpc/rewards_join",
       "/rest/v1/rpc/rewards_state",
     ]);
@@ -602,7 +594,7 @@ describe("a deployment whose database is down", () => {
   it("still says rewards are on, with no count of traders, and passes on none of the database's words", async () => {
     const response = await api.call("/v1/rewards/config");
     expect(response.status).toBe(200);
-    expect(response.json).toMatchObject({ enabled: true, weeklyPoints: 100_000 });
+    expect(response.json).toMatchObject({ enabled: true, seasonStart: expect.any(String) });
     expect([response.json.members, response.json.tradersThisWeek]).toEqual([null, null]);
     expect(response.text).not.toContain("upstream connect error");
   });
@@ -624,8 +616,6 @@ describe("a deployment with no rewards configuration", () => {
       {
         enabled: false,
         seasonStart: null,
-        seasonWeeks: null,
-        weeklyPoints: null,
         members: null,
         tradersThisWeek: null,
         doubleHour: null,

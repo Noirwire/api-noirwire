@@ -19,7 +19,7 @@ export type NewMember = {
   code: string;
   /** The code they joined with, or null. */
   inviteCode: string | null;
-  /** The week they join in, counted from the season start. */
+  /** The week they join in, counted from the configured start. */
   joinedWeek: number;
   /** The UTC day they join on, in days since 1970-01-01, and the most new members that day may have. */
   joinedDay: number;
@@ -41,7 +41,7 @@ export type MemberState = {
   /** How many members joined with this member's code. */
   invited: number;
   wasInvited: boolean;
-  /** The week the member joined in, counted from the season start. */
+  /** The week the member joined in, counted from the configured start. */
   joinedWeek: number;
   /** The member's place in the order of joining, from 1. */
   memberNumber: number;
@@ -82,12 +82,10 @@ export type Credited = "credited" | "duplicate" | "not_member" | "settled";
 
 export type RewardsStorage = {
   join(member: NewMember): Promise<Stored<Joined>>;
-  /** A member as of `week` (null outside the season: no week's fees are read), or null when the key has not joined. */
+  /** A member as of `week` (null before the start: no week's fees are read), or null when the key has not joined. */
   state(rewardsKey: string, week: number | null): Promise<Stored<MemberState | null>>;
   /** Records the fingerprint and adds the fee, as paid and as counted, to the member's week, or does neither. */
   credit(credit: Credit): Promise<Stored<Credited>>;
-  /** Hands out `weeklyPoints` for each of the first `weeks` weeks that has not been settled. Settling twice changes nothing. */
-  settle(weeks: number, weeklyPoints: number): Promise<Stored<null>>;
-  /** How many members there are, and how many have a fee credited in `week` (null outside the season), in one read. */
+  /** How many members there are, and how many have a fee credited in `week` (null before the start), in one read. */
   totals(week: number | null): Promise<Stored<Totals>>;
 };

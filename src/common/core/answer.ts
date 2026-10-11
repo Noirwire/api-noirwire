@@ -69,7 +69,10 @@ export const ERRORS = {
   transaction_failed: [422, "The transaction failed. A failed trade earns nothing."],
   not_a_signer: [422, "This portfolio did not sign the transaction."],
   no_referral_fee: [422, "No trading fee reached NoirWire in this transaction."],
-  outside_claim_window: [422, "This trade was made outside the season, or too long ago to claim."],
+  outside_claim_window: [
+    422,
+    "This trade was made before rewards started, or too long ago to claim.",
+  ],
   rate_limited: [429, "Too many requests. Wait and try again."],
   internal_error: [500, "The request could not be handled."],
   upstream_failed: [502, "The provider did not give a usable answer."],

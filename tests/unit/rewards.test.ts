@@ -39,7 +39,6 @@ let chain: Map<string, ChainTransaction>;
 let looked: string[];
 let allowed: boolean;
 let codes: string[];
-let settleCalls: number;
 let totalsCalls: number;
 let databaseDown: Answer | null;
 
@@ -58,10 +57,6 @@ function rewards(options: Deployment = {}): Rewards {
                 ? Promise.resolve({ failed: databaseDown })
                 : store.storage.state(rewardsKey, week),
             credit: (credit) => store.storage.credit(credit),
-            settle: (weeks, weeklyPoints) => {
-              settleCalls += 1;
-              return store.storage.settle(weeks, weeklyPoints);
-            },
             totals: (week) => {
               totalsCalls += 1;
               return databaseDown
@@ -181,7 +176,6 @@ beforeEach(() => {
   looked = [];
   allowed = true;
   codes = [];
-  settleCalls = 0;
   totalsCalls = 0;
   databaseDown = null;
 });
@@ -192,8 +186,6 @@ describe("a deployment with no rewards", () => {
     expect(read(await api.config())).toEqual({
       enabled: false,
       seasonStart: null,
-      seasonWeeks: null,
-      weeklyPoints: null,
       members: null,
       tradersThisWeek: null,
       doubleHour: null,
@@ -211,17 +203,21 @@ describe("a deployment with no rewards", () => {
   });
 });
 
-describe("the season", () => {
-  it("is stated from the configuration: its start, twelve weeks, 100,000 points a week", async () => {
+describe("the deployment's config", () => {
+  it("is stated from the configuration: its start, and the running counts, no points carried", async () => {
     expect(read(await rewards().config())).toEqual({
       enabled: true,
       seasonStart: "2026-10-19T00:00:00.000Z",
-      seasonWeeks: 12,
-      weeklyPoints: 100_000,
       members: 0,
       tradersThisWeek: 0,
       doubleHour: null,
     });
+  });
+
+  it("no longer carries seasonWeeks or weeklyPoints: rewards are in a preview with no end", async () => {
+    const body = read(await rewards().config());
+    expect(body).not.toHaveProperty("seasonWeeks");
+    expect(body).not.toHaveProperty("weeklyPoints");
   });
 });
 
@@ -245,13 +241,18 @@ describe("the count of this week's traders", () => {
     expect(read(await state(api, member)).week.traders).toBe(2);
   });
 
-  it("is null outside the season, while the members are still counted", async () => {
+  it("is null before the start, while the members are still counted", async () => {
     const api = rewards();
     await trader(api);
-    for (const outside of [SEASON_START_MS - 1_000, SEASON_START_MS + 12 * WEEK_MS]) {
-      clock = outside;
-      expect(read(await api.config())).toMatchObject({ tradersThisWeek: null, members: 1 });
-    }
+    clock = SEASON_START_MS - 1_000;
+    expect(read(await api.config())).toMatchObject({ tradersThisWeek: null, members: 1 });
+  });
+
+  it("is a real count well past the twelfth week, since weeks keep being counted with no end", async () => {
+    const api = rewards();
+    await trader(api);
+    clock = SEASON_START_MS + 12 * WEEK_MS;
+    expect(read(await api.config())).toMatchObject({ tradersThisWeek: 0, members: 1 });
   });
 
   it("is read once and answered for 60 seconds, then read again", async () => {
@@ -301,7 +302,6 @@ describe("the count of this week's traders", () => {
     expect(answered.status).toBe(200);
     expect(read(answered)).toMatchObject({
       enabled: true,
-      seasonWeeks: 12,
       members: null,
       tradersThisWeek: null,
     });
@@ -562,7 +562,7 @@ describe("the weeks of the bonus an invited member has left", () => {
     expect(await left(api, inviter)).toBe(0);
   });
 
-  it("are still counted once the season is over, and never below zero", async () => {
+  it("are still counted long after joining, and never below zero", async () => {
     const api = rewards();
     const { code } = await activeMember(api);
     const invited = Keypair.generate();
@@ -570,7 +570,10 @@ describe("the weeks of the bonus an invited member has left", () => {
     await join(api, invited, { inviteCode: code });
 
     clock = SEASON_START_MS + 13 * WEEK_MS;
-    expect(read(await state(api, invited))).toMatchObject({ week: null, boostWeeksLeft: 6 });
+    expect(read(await state(api, invited))).toMatchObject({
+      week: { index: 13 },
+      boostWeeksLeft: 6,
+    });
     clock = SEASON_START_MS + 40 * WEEK_MS;
     expect(await left(api, invited)).toBe(0);
   });
@@ -723,11 +726,22 @@ describe("a claim", () => {
     ]);
   });
 
-  it("refuses a trade made before the season began", async () => {
+  it("refuses a trade made before rewards started", async () => {
     clock = SEASON_START_MS - DAY_MS;
     const id = landed(portfolio);
     clock = SEASON_START_MS + DAY_MS;
     expect(outcome(await claim(api, member, portfolio, id))).toEqual([422, "outside_claim_window"]);
+  });
+
+  it("credits a claim in a week beyond the twelfth: weeks keep being counted with no end", async () => {
+    clock = SEASON_START_MS + 60 * WEEK_MS;
+    const answered = await claim(api, member, portfolio, landed(portfolio, { fee: 61_000n }));
+    expect(answered.status).toBe(200);
+    expect(read(answered)).toMatchObject({
+      credited: true,
+      feeMicroUsdc: "61000",
+      state: { week: { index: 60, feeMicroUsdc: "61000" } },
+    });
   });
 
   it("credits a transaction once, whoever claims it again", async () => {
@@ -785,92 +799,66 @@ describe("a claim", () => {
   });
 });
 
-describe("settling a week", () => {
-  const closesAt = (week: number) => SEASON_START_MS + (week + 1) * WEEK_MS + DAY_MS;
-
-  it("happens on the first request after its claims close, and hands the whole pot to a lone member", async () => {
-    const api = rewards();
-    const member = Keypair.generate();
-    const portfolio = Keypair.generate();
-    await join(api, member);
-    await claim(api, member, portfolio, landed(portfolio));
-
-    clock = closesAt(2) - 1;
-    expect(read(await state(api, member)).points).toBe("0");
-    clock = closesAt(2);
-    expect(read(await state(api, member)).points).toBe("100000");
-  });
-
-  it("splits by score: 1.1 for the invited member, 0.2 of their fees for the inviter, never over the pot", async () => {
-    const api = rewards();
-    const { member: inviter, code } = await activeMember(api);
-    const invited = Keypair.generate();
-    const portfolio = Keypair.generate();
-    await join(api, invited, { inviteCode: code });
-    await claim(api, invited, portfolio, landed(portfolio, { fee: 1_000n }));
-
-    // Both paid 1,000: the inviter scores 1,000 + 200, the invited member 1,100.
-    expect(read(await state(api, inviter)).week.shareBps).toBe(5_217);
-    clock = closesAt(2);
-    const points = [read(await state(api, inviter)).points, read(await state(api, invited)).points];
-    expect(points).toEqual(["52173", "47826"]);
-  });
-
-  it("hands out nothing for a week nobody traded in", async () => {
-    const api = rewards();
-    const member = Keypair.generate();
-    await join(api, member);
-    clock = closesAt(4);
-    expect(read(await state(api, member)).points).toBe("0");
-    expect(store.settlements).toEqual([0, 1, 2, 3, 4]);
-  });
-
-  it("settles a week once, and asks the database once a week and not once a request", async () => {
-    const api = rewards();
-    const member = Keypair.generate();
-    const portfolio = Keypair.generate();
-    await join(api, member);
-    await claim(api, member, portfolio, landed(portfolio));
-    const before = settleCalls;
-
-    clock = closesAt(2);
-    await state(api, member);
-    await state(api, member);
-    expect(read(await join(api, member)).points).toBe("100000");
-    expect(settleCalls).toBe(before + 1);
-
-    // Another process, which has not seen the week settled, asks again: nothing is handed out twice.
-    expect(read(await state(rewards(), member)).points).toBe("100000");
-    expect(store.settlements.filter((week) => week === 2)).toHaveLength(1);
-  });
-
-  it("stops at twelve weeks, however long after the season a request comes", async () => {
-    const api = rewards();
-    const member = Keypair.generate();
-    await join(api, member);
-    clock = SEASON_START_MS + 60 * WEEK_MS;
-    await state(api, member);
-    expect(store.settlements).toHaveLength(12);
-  });
-});
-
-describe("outside the season", () => {
+describe("before the configured start", () => {
   it("has no running week before week 0 begins, and a member can already join", async () => {
     clock = SEASON_START_MS - 1_000;
     const answered = await join(rewards(), Keypair.generate());
     expect([answered.status, read(answered).week]).toEqual([200, null]);
   });
+});
 
-  it("has no running week once the last has ended, and still returns the settled points", async () => {
+describe("rewards in a preview", () => {
+  it('never hands out points: a member\'s state always shows "0", however long after joining', async () => {
     const api = rewards();
     const member = Keypair.generate();
     const portfolio = Keypair.generate();
     await join(api, member);
-    await claim(api, member, portfolio, landed(portfolio));
+    await claim(api, member, portfolio, landed(portfolio, { fee: 61_000n }));
+    for (const weeksLater of [0, 4, 12, 60]) {
+      clock = SEASON_START_MS + (2 + weeksLater) * WEEK_MS + DAY_MS;
+      expect(read(await state(api, member)).points).toBe("0");
+    }
+  });
 
-    clock = SEASON_START_MS + 12 * WEEK_MS - 1_000;
-    expect(read(await state(api, member)).week.index).toBe(11);
-    clock = SEASON_START_MS + 12 * WEEK_MS;
-    expect(read(await state(api, member))).toMatchObject({ week: null, points: "100000" });
+  it("is never triggered by any request: no route ever calls the database's settle function", async () => {
+    let settleCalls = 0;
+    const baseline = memoryRewardsStorage();
+    const storageWithSettleSpy = {
+      join: baseline.storage.join,
+      state: baseline.storage.state,
+      credit: baseline.storage.credit,
+      totals: baseline.storage.totals,
+      settle: () => {
+        settleCalls += 1;
+        return Promise.resolve({ value: null });
+      },
+    };
+    const api = createRewards({
+      upstream: {
+        storage: storageWithSettleSpy,
+        transactions: {
+          finalized: (signature) => Promise.resolve({ transaction: chain.get(signature) ?? null }),
+        },
+        rpcAllowance: () => Promise.resolve(true),
+        seasonStartMs: SEASON_START_MS,
+        dailyJoinCap: 2_000,
+        doubleHourStartMs: null,
+        referralAccount: REFERRAL_ACCOUNT,
+        usdcMint: USDC_MINT,
+        fingerprintSecret: FINGERPRINT_SECRET,
+      },
+      log: () => {},
+      now: () => clock,
+    });
+
+    const member = Keypair.generate();
+    const portfolio = Keypair.generate();
+    await join(api, member);
+    await state(api, member);
+    clock = SEASON_START_MS + 60 * WEEK_MS;
+    await claim(api, member, portfolio, landed(portfolio, { fee: 61_000n }));
+    await state(api, member);
+
+    expect(settleCalls).toBe(0);
   });
 });

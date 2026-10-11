@@ -10,13 +10,15 @@ import type { MemberState, RewardsStorage } from "../../src/rewards/core/storage
 /**
  * What the rewards tests share: made-up keys, a trade in the shape the RPC
  * reports one, and a stand-in for the database that keeps everything in
- * memory.
+ * memory. Rewards are in a preview, so the stand-in never settles a week or
+ * hands out points; a member's `points` stays `0n`.
  *
- * The stand-in scores and settles by the two functions below, which say in
- * TypeScript what `rewards_scores` and `rewards_settle` say in SQL. The
- * real rules are the SQL ones; `tests/integration/rewardsSql.test.ts` runs
- * both over the same members and fees and fails when they differ, so a
- * suite that passes against the stand-in is not passing against rules of
+ * `weeklyScores` and `splitPoints` below say in TypeScript what
+ * `rewards_scores` and `rewards_settle` say in SQL. The real rules are the
+ * SQL ones, and only `tests/integration/rewardsSql.test.ts` calls
+ * `rewards_settle` (directly, by name: the application no longer does). It
+ * runs both over the same members and fees and fails when they differ, so a
+ * suite that passes against these functions is not passing against rules of
  * its own.
  */
 
@@ -24,7 +26,7 @@ export type Scorer = {
   rewardsKey: string;
   /** The member whose code this one joined with, or null. */
   invitedBy: string | null;
-  /** The week the member joined in, counted from the season start. */
+  /** The week the member joined in, counted from the configured start. */
   joinedWeek: number;
 };
 
@@ -178,8 +180,6 @@ export function memoryRewardsStorage() {
   const fees = new Map<number, Map<string, bigint>>();
   const counted = new Map<number, Map<string, bigint>>();
   const fingerprints = new Set<string>();
-  const points = new Map<number, Map<string, bigint>>();
-  const settlements: number[] = [];
 
   const feesOf = (week: number | null) =>
     (week === null ? undefined : fees.get(week)) ?? new Map<string, bigint>();
@@ -226,7 +226,8 @@ export function memoryRewardsStorage() {
         wasInvited: member.invitedBy !== null,
         joinedWeek: member.joinedWeek,
         memberNumber: member.memberNumber,
-        points: [...points.values()].reduce((sum, week) => sum + (week.get(rewardsKey) ?? 0n), 0n),
+        // Nothing ever settles a week here: rewards are in a preview, and no route hands out points.
+        points: 0n,
         weekFeeMicroUsdc: feesOf(week).get(rewardsKey) ?? 0n,
         weekScore: scores.get(rewardsKey) ?? 0n,
         weekTotalScore: [...scores.values()].reduce((sum, score) => sum + score, 0n),
@@ -237,7 +238,6 @@ export function memoryRewardsStorage() {
 
     credit({ rewardsKey, fingerprint, week, feeMicroUsdc, countedMicroUsdc }) {
       if (!members.has(rewardsKey)) return Promise.resolve({ value: "not_member" });
-      if (points.has(week)) return Promise.resolve({ value: "settled" });
       if (fingerprints.has(fingerprint)) return Promise.resolve({ value: "duplicate" });
       fingerprints.add(fingerprint);
       const ofWeek = feesOf(week);
@@ -249,16 +249,6 @@ export function memoryRewardsStorage() {
       return Promise.resolve({ value: "credited" });
     },
 
-    settle(weeks, weeklyPoints) {
-      for (let week = 0; week < weeks; week += 1) {
-        if (points.has(week)) continue;
-        settlements.push(week);
-        const scores = weeklyScores(week, [...members.values()], countedOf(week));
-        points.set(week, splitPoints(scores, BigInt(weeklyPoints)));
-      }
-      return Promise.resolve({ value: null });
-    },
-
     totals: (week) =>
       Promise.resolve({ value: { members: members.size, weekTraders: feesOf(week).size } }),
   };
@@ -266,15 +256,12 @@ export function memoryRewardsStorage() {
   return {
     storage,
     members,
-    /** The weeks settled, in the order they were. */
-    settlements,
     stored: () =>
       JSON.stringify({
         members: [...members.values()],
         fees: [...fees].map(([week, ofWeek]) => [week, [...ofWeek].map(String)]),
         counted: [...counted].map(([week, ofWeek]) => [week, [...ofWeek].map(String)]),
         fingerprints: [...fingerprints],
-        points: [...points].map(([week, ofWeek]) => [week, [...ofWeek].map(String)]),
       }),
   };
 }

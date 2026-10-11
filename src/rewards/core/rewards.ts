@@ -14,14 +14,15 @@ import type { Caller, RouteLimits } from "../../common/core/quota.js";
 import { DOUBLE_HOUR_MS, readClaim } from "./claim.js";
 import { REWARDS_ROUTE } from "./database.js";
 import { rewardsMessage, signatureVerifies, timely } from "./messages.js";
-import { boostWeeksLeft, shareBps, WEEKLY_POINTS } from "./points.js";
+import { boostWeeksLeft, shareBps } from "./points.js";
 import type { MemberState, RewardsStorage, Totals } from "./storage.js";
 import type { Transactions } from "./transactions.js";
-import { closedWeeks, SEASON_WEEKS, seasonWeekAt, weekAt, weekEndsAt } from "./weeks.js";
+import { countedWeekAt, weekAt, weekEndsAt } from "./weeks.js";
 
 /**
- * Points for trades, for a wallet that asks for them. A wallet that never
- * joins sends nothing here.
+ * Rewards are in a preview: no points are handed out. A member's trade fees
+ * are still recorded per week, counted from the configured start, for a
+ * wallet that asks for them. A wallet that never joins sends nothing here.
  *
  * A member is a rewards key: a key the wallet derives for this alone, which
  * is not a Solana account and holds nothing. It is never the profile key,
@@ -98,7 +99,7 @@ function requested<T>(schema: z.ZodType<T>, body: string): T | null {
   return request.success ? request.data : null;
 }
 
-/** The season, where it is kept, and how a trade is read from the chain. */
+/** Where recorded rewards are kept, and how a trade is read from the chain. */
 export type RewardsUpstream = {
   storage: RewardsStorage;
   transactions: Transactions;
@@ -115,7 +116,7 @@ export type RewardsUpstream = {
 };
 
 export type RewardsDeps = {
-  /** Null when this deployment hands out no points. */
+  /** Null when this deployment does not record rewards at all. */
   upstream: RewardsUpstream | null;
   log: Log;
   now?: () => number;
@@ -123,7 +124,7 @@ export type RewardsDeps = {
 };
 
 export type Rewards = {
-  /** Whether points are handed out here, the season's shape, and how many members there are and traded this week. */
+  /** Whether this is configured, and how many members there are and traded this week. */
   config(): Promise<Answer>;
   join(body: string): Promise<Answer>;
   state(body: string): Promise<Answer>;
@@ -146,24 +147,7 @@ export function createRewards(deps: RewardsDeps): Rewards {
     return answered;
   }
 
-  /** How many weeks this process has seen settled, so the database is asked once a week and not once a request. */
-  let weeksSettled = 0;
-
-  /**
-   * Settles every week whose claims have closed, on the first request that
-   * comes after. The database does it in one call and at most once per
-   * week, whoever asks and however many ask at once.
-   */
-  async function settleDue({ storage, seasonStartMs }: RewardsUpstream): Promise<Answer | null> {
-    const due = closedWeeks(seasonStartMs, now());
-    if (due <= weeksSettled) return null;
-    const settled = await storage.settle(due, WEEKLY_POINTS);
-    if ("failed" in settled) return settled.failed;
-    weeksSettled = Math.max(weeksSettled, due);
-    return null;
-  }
-
-  /** A member as the wallet shows one. Outside the season there is no running week, and the points stand. */
+  /** A member as the wallet shows one. Before the start there is no running week, and the points stand. */
   function shown(member: MemberState, week: number | null, seasonStartMs: number) {
     return {
       code: member.code,
@@ -171,7 +155,7 @@ export function createRewards(deps: RewardsDeps): Rewards {
       invited: member.invited,
       memberNumber: member.memberNumber,
       wasInvited: member.wasInvited,
-      // Outside the season the weeks are still counted from where the clock is, never from before week 0.
+      // Before the start the weeks are still counted from where the clock is, never from before week 0.
       boostWeeksLeft: boostWeeksLeft(
         member.wasInvited,
         member.joinedWeek,
@@ -196,7 +180,7 @@ export function createRewards(deps: RewardsDeps): Rewards {
     { storage, seasonStartMs }: RewardsUpstream,
     rewardsKey: string,
   ): Promise<{ state: ReturnType<typeof shown> | null } | { failed: Answer }> {
-    const week = seasonWeekAt(seasonStartMs, now());
+    const week = countedWeekAt(seasonStartMs, now());
     const read = await storage.state(rewardsKey, week);
     if ("failed" in read) return read;
     return { state: read.value && shown(read.value, week, seasonStartMs) };
@@ -227,7 +211,7 @@ export function createRewards(deps: RewardsDeps): Rewards {
    * being up.
    */
   function totals({ storage, seasonStartMs }: RewardsUpstream): Promise<Totals | null> {
-    const week = seasonWeekAt(seasonStartMs, now());
+    const week = countedWeekAt(seasonStartMs, now());
     if (counted?.week !== week || now() - counted.at >= TOTALS_TTL_MS) {
       const read = storage.totals(week).then((read) => ("failed" in read ? null : read.value));
       counted = { week, at: now(), totals: read };
@@ -235,18 +219,16 @@ export function createRewards(deps: RewardsDeps): Rewards {
     return counted.totals;
   }
 
-  /** The season as every wallet is told it. Joining is open before the season starts and after it ends, so the members are counted then too. */
-  async function season(configured: RewardsUpstream) {
+  /** What every wallet is told about this deployment. Joining is open before the start, so the members are counted then too. */
+  async function configOf(configured: RewardsUpstream) {
     const { seasonStartMs, doubleHourStartMs } = configured;
     const counts = await totals(configured);
     return {
       enabled: true,
       seasonStart: new Date(seasonStartMs).toISOString(),
-      seasonWeeks: SEASON_WEEKS,
-      weeklyPoints: WEEKLY_POINTS,
       members: counts?.members ?? null,
       tradersThisWeek:
-        counts && seasonWeekAt(seasonStartMs, now()) !== null ? counts.weekTraders : null,
+        counts && countedWeekAt(seasonStartMs, now()) !== null ? counts.weekTraders : null,
       doubleHour:
         doubleHourStartMs === null
           ? null
@@ -262,12 +244,10 @@ export function createRewards(deps: RewardsDeps): Rewards {
       return answer(
         200,
         upstream
-          ? await season(upstream)
+          ? await configOf(upstream)
           : {
               enabled: false,
               seasonStart: null,
-              seasonWeeks: null,
-              weeklyPoints: null,
               members: null,
               tradersThisWeek: null,
               doubleHour: null,
@@ -282,7 +262,7 @@ export function createRewards(deps: RewardsDeps): Rewards {
       // The code as it is looked up is the code that was signed for: nobody
       // on the way can tie a new member to an inviter of their choosing.
       const inviteCode = request.inviteCode?.trim().toUpperCase() ?? "";
-      const refused = unsigned("join", request, inviteCode) ?? (await settleDue(upstream));
+      const refused = unsigned("join", request, inviteCode);
       if (refused) return refused;
 
       for (let attempt = 0; attempt < CODE_ATTEMPTS; attempt += 1) {
@@ -309,7 +289,7 @@ export function createRewards(deps: RewardsDeps): Rewards {
       if (!upstream) return absent();
       const request = requested(stateRequest, body);
       if (!request) return invalid();
-      const refused = unsigned("state", request) ?? (await settleDue(upstream));
+      const refused = unsigned("state", request);
       if (refused) return refused;
       const read = await stateOf(upstream, request.rewardsKey);
       if ("failed" in read) return read.failed;
@@ -328,8 +308,6 @@ export function createRewards(deps: RewardsDeps): Rewards {
       ) {
         return failed("signature_invalid");
       }
-      const unsettled = await settleDue(upstream);
-      if (unsettled) return unsettled;
       const member = await stateOf(upstream, request.rewardsKey);
       if ("failed" in member) return member.failed;
       if (!member.state) return failed("not_a_member");
@@ -362,7 +340,6 @@ export function createRewards(deps: RewardsDeps): Rewards {
       if ("failed" in credited) return credited.failed;
       if (credited.value === "duplicate") return failed("already_claimed");
       if (credited.value === "not_member") return failed("not_a_member");
-      // The week was settled between the check above and this write.
       if (credited.value === "settled") return failed("outside_claim_window");
 
       const read = await stateOf(upstream, request.rewardsKey);

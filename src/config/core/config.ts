@@ -360,15 +360,16 @@ const isoInstant = z.union([z.iso.date(), z.iso.datetime()]);
 const offsetInstant = z.iso.datetime({ offset: true });
 
 /**
- * The rewards season and where it is kept, or null when this deployment
- * hands out no points: with any of `REWARDS_DATABASE_SECRET_KEY`,
- * `REWARDS_FINGERPRINT_SECRET`, `REWARDS_SEASON_START` and
- * `REWARDS_REFERRAL_ACCOUNT` unset the feature is off, the wallets are told
- * so, and they work exactly as they do without it.
+ * Where recorded rewards are kept and the weeks they are counted in, or null
+ * when this deployment does not record rewards at all: with any of
+ * `REWARDS_DATABASE_SECRET_KEY`, `REWARDS_FINGERPRINT_SECRET`,
+ * `REWARDS_SEASON_START` and `REWARDS_REFERRAL_ACCOUNT` unset the feature is
+ * off, the wallets are told so, and they work exactly as they do without it.
  *
- * With all four set, each must be right or the start is refused: a season
- * that begins mid-week or a fee read from the wrong account would hand out
- * points nobody earned. A problem names the variable and never its value.
+ * With all four set, each must be right or the start is refused: a start
+ * that begins mid-week or a fee read from the wrong account would record
+ * fees nobody paid, or under the wrong week. A problem names the variable
+ * and never its value.
  *
  * `REWARDS_DAILY_JOIN_CAP` bounds how many keys become members on one UTC
  * day, whoever asks: a member costs nothing to make, so without it one

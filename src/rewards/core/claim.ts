@@ -1,4 +1,4 @@
-import { claimOpen, seasonWeekAt } from "./weeks.js";
+import { claimOpen, countedWeekAt } from "./weeks.js";
 
 /**
  * What a claimed trade is worth, read from the transaction as the chain
@@ -94,7 +94,7 @@ export function readClaim(transaction: ChainTransaction, terms: ClaimTerms): Cla
   if (!transaction.signers.includes(terms.portfolio)) return { ok: false, code: "not_a_signer" };
   const feeMicroUsdc = referralFee(transaction, terms.referralAccount, terms.usdcMint);
   if (feeMicroUsdc === 0n) return { ok: false, code: "no_referral_fee" };
-  const week = seasonWeekAt(terms.seasonStartMs, transaction.blockTime * 1_000);
+  const week = countedWeekAt(terms.seasonStartMs, transaction.blockTime * 1_000);
   if (week === null || !claimOpen(terms.seasonStartMs, week, terms.nowMs)) {
     return { ok: false, code: "outside_claim_window" };
   }
