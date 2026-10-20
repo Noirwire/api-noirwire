@@ -21,15 +21,25 @@ type Route = {
   asQuery?: readonly string[];
   /** The platform fee is added to the query by this server; whatever the body says of it is dropped. */
   withReferral?: boolean;
+  /** Fields of the query that may only take this one value. */
+  fixed?: Readonly<Record<string, string>>;
 };
+
+/**
+ * The routers whose swap instruction the wallet cannot read its minimum
+ * output from, so it refuses their routes. Leaving them out of the order is
+ * the only router choice a caller can make: it can never pick one.
+ */
+export const EXCLUDED_ROUTERS = "dflow,okx";
 
 /** The one read that names nobody and is the same for everyone: the lending vaults and their rates. */
 export const VAULTS_PATH = "lend/v1/earn/tokens";
 
 export const JUPITER_ROUTES: Readonly<Record<string, Route>> = {
   "POST swap/v2/order": {
-    asQuery: ["inputMint", "outputMint", "amount", "taker", "slippageBps"],
+    asQuery: ["inputMint", "outputMint", "amount", "taker", "slippageBps", "excludeRouters"],
     withReferral: true,
+    fixed: { excludeRouters: EXCLUDED_ROUTERS },
   },
   "POST swap/v2/execute": {},
   [`GET ${VAULTS_PATH}`]: {},
@@ -67,7 +77,11 @@ export function jupiterLimits(providerRps: number): RouteLimits {
 const flatStrings = z.record(z.string(), z.string());
 
 /** The body's fields as a query string, or null unless it is a flat object of the allowed fields. */
-export function queryFrom(body: string, allowed: readonly string[]): string | null {
+export function queryFrom(
+  body: string,
+  allowed: readonly string[],
+  fixed: Readonly<Record<string, string>> = {},
+): string | null {
   let json: unknown;
   try {
     json = JSON.parse(body);
@@ -80,6 +94,7 @@ export function queryFrom(body: string, allowed: readonly string[]): string | nu
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(fields.data)) {
     if (!allowed.includes(key)) return null;
+    if (Object.hasOwn(fixed, key) && fixed[key] !== value) return null;
     query.set(key, value);
   }
   return query.toString();
@@ -123,7 +138,11 @@ export function planJupiter(
 ): JupiterPlan {
   const invalid = { refused: refusal("invalid_request") };
   if (route.asQuery) {
-    const query = queryFrom(route.withReferral ? withoutReferral(body) : body, route.asQuery);
+    const query = queryFrom(
+      route.withReferral ? withoutReferral(body) : body,
+      route.asQuery,
+      route.fixed,
+    );
     if (query === null) return invalid;
     const fee =
       route.withReferral && referral
