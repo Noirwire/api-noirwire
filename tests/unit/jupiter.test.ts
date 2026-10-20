@@ -67,6 +67,17 @@ describe("the Jupiter allow-list", () => {
     }
   });
 
+  it("lets an order leave out the routers the wallet cannot check, and no other router choice", () => {
+    const leftOut = { ...order, excludeRouters: "dflow,okx" };
+    expect(plan("POST", "swap/v2/order", leftOut)).toEqual({
+      method: "GET",
+      pathAndQuery: `swap/v2/order?${new URLSearchParams(leftOut).toString()}`,
+    });
+    for (const routers of ["jupiterz", "dflow", "okx,dflow", "metis,jupiterz,dflow,okx", ""]) {
+      expect(plan("POST", "swap/v2/order", { ...order, excludeRouters: routers })).toBe(400);
+    }
+  });
+
   it("refuses a body that is not a flat object of strings", () => {
     expect(queryFrom("not json", ["a"])).toBeNull();
     expect(queryFrom("[]", ["a"])).toBeNull();
