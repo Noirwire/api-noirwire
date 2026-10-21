@@ -51,6 +51,8 @@ REWARDS_DAILY_JOIN_CAP=<the most new members on one UTC day; 2000 when unset>
 REWARDS_DOUBLE_HOUR_START=<optional: when the double hour begins, with its offset, such as 2026-11-07T18:00:00Z>
 ```
 
+**The trading fee needs one of them.** `REWARDS_REFERRAL_ACCOUNT` is also the account every order's fee (50 bps) is paid to, and this server is the only place that fee is set: a wallet's own value is dropped. Set it on every mainnet deploy, with rewards on or off, to the referral account the wallets are built with. Without it, orders carry no NoirWire fee.
+
 Before setting them, apply the rewards migration to that project: it creates the rewards tables and the SQL functions this server calls. The project's migration history is kept in the `app-noirwire` repository, which holds the same file, so apply it from there (`npx supabase link`, then `npx supabase db push`). The copy in this repository's `supabase/migrations` is the one the tests execute; keep the two identical. The tables have row level security on and no policy, so only the secret key reaches them. Keep both secrets in Railway only, and seal the variables.
 
 Set `REWARDS_FINGERPRINT_SECRET` and `REWARDS_SEASON_START` once. A new fingerprint secret lets every trade already claimed be claimed again, and a new start moves the weeks under fees already credited. Rewards are in a preview while this ships: no points are handed out, but a member's trade fees are still recorded per week, counted from `REWARDS_SEASON_START` with no end.

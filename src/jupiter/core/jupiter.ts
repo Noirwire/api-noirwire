@@ -20,7 +20,27 @@ type Route = {
   asQuery?: readonly string[];
   /** Fields of the query that may only take this one value. */
   fixed?: Readonly<Record<string, string>>;
+  /** Carries NoirWire's trading fee, which this server sets and a caller never does. */
+  fee?: true;
 };
+
+/**
+ * NoirWire's fee on every order, in basis points, taken through Jupiter's
+ * referral program. Jupiter accepts 50 to 255.
+ */
+export const NOIRWIRE_FEE_BPS = 50;
+
+/**
+ * The fields that name the fee and where it is paid. On an order this server
+ * writes them itself and drops whatever a caller sent for them, so no caller
+ * can lower the fee, raise it or send it to another account.
+ */
+export const FEE_FIELDS = ["referralAccount", "referralFee"] as const;
+
+/** The fee fields for an order: NoirWire's account and rate, or none when no account is configured. */
+export function feeFields(referralAccount: string | null): Record<string, string> {
+  return referralAccount ? { referralAccount, referralFee: String(NOIRWIRE_FEE_BPS) } : {};
+}
 
 /**
  * The routers whose swap instruction the wallet cannot read its minimum
@@ -34,17 +54,9 @@ export const VAULTS_PATH = "lend/v1/earn/tokens";
 
 export const JUPITER_ROUTES: Readonly<Record<string, Route>> = {
   "POST swap/v2/order": {
-    asQuery: [
-      "inputMint",
-      "outputMint",
-      "amount",
-      "taker",
-      "slippageBps",
-      "referralAccount",
-      "referralFee",
-      "excludeRouters",
-    ],
+    asQuery: ["inputMint", "outputMint", "amount", "taker", "slippageBps", "excludeRouters"],
     fixed: { excludeRouters: EXCLUDED_ROUTERS },
+    fee: true,
   },
   "POST swap/v2/execute": {},
   [`GET ${VAULTS_PATH}`]: {},
@@ -81,11 +93,17 @@ export function jupiterLimits(providerRps: number): RouteLimits {
 /** A flat object of strings: what a body that becomes a query has to be. */
 const flatStrings = z.record(z.string(), z.string());
 
-/** The body's fields as a query string, or null unless it is a flat object of the allowed fields. */
+/**
+ * The body's fields as a query string, or null unless it is a flat object of
+ * the allowed fields. A field named in `dropped` is taken and left out, and
+ * `added` is written after the caller's fields.
+ */
 export function queryFrom(
   body: string,
   allowed: readonly string[],
   fixed: Readonly<Record<string, string>> = {},
+  dropped: readonly string[] = [],
+  added: Readonly<Record<string, string>> = {},
 ): string | null {
   let json: unknown;
   try {
@@ -98,10 +116,12 @@ export function queryFrom(
   if (!fields.success) return null;
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(fields.data)) {
+    if (dropped.includes(key)) continue;
     if (!allowed.includes(key)) return null;
     if (Object.hasOwn(fixed, key) && fixed[key] !== value) return null;
     query.set(key, value);
   }
+  for (const [key, value] of Object.entries(added)) query.set(key, value);
   return query.toString();
 }
 
@@ -114,11 +134,23 @@ export type JupiterPlan =
   | { upstream: { method: "GET" | "POST"; pathAndQuery: string; body?: string } }
   | { refused: Answer };
 
-/** What is sent to Jupiter for an admitted request on a listed route. */
-export function planJupiter(route: Route, method: string, path: string, body: string): JupiterPlan {
+/**
+ * What is sent to Jupiter for an admitted request on a listed route. An order
+ * carries NoirWire's fee to `referralAccount`, or no fee when that is null,
+ * whatever the caller asked for.
+ */
+export function planJupiter(
+  route: Route,
+  method: string,
+  path: string,
+  body: string,
+  referralAccount: string | null,
+): JupiterPlan {
   const invalid = { refused: refusal("invalid_request") };
   if (route.asQuery) {
-    const query = queryFrom(body, route.asQuery, route.fixed);
+    const query = route.fee
+      ? queryFrom(body, route.asQuery, route.fixed, FEE_FIELDS, feeFields(referralAccount))
+      : queryFrom(body, route.asQuery, route.fixed);
     if (query === null) return invalid;
     return { upstream: { method: "GET", pathAndQuery: `${path}?${query}` } };
   }

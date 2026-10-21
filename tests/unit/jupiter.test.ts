@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   JUPITER_ROUTES,
   jupiterRoute,
+  NOIRWIRE_FEE_BPS,
   planJupiter,
   queryFrom,
 } from "../../src/jupiter/core/jupiter.js";
@@ -16,11 +17,28 @@ const order = {
   slippageBps: "50",
 };
 
-function plan(method: "GET" | "POST", path: string, body: unknown) {
+const REFERRAL = "BPFLoaderUpgradeab1e11111111111111111111111";
+const STRANGER = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
+
+function plan(
+  method: "GET" | "POST",
+  path: string,
+  body: unknown,
+  referralAccount: string | null = null,
+) {
   const route = jupiterRoute(method, path);
   if (!route) return "not found";
-  const planned = planJupiter(route, method, path, JSON.stringify(body));
+  const planned = planJupiter(route, method, path, JSON.stringify(body), referralAccount);
   return "refused" in planned ? planned.refused.status : planned.upstream;
+}
+
+/** The query Jupiter is sent for an order, as fields. */
+function orderSent(body: unknown, referralAccount: string | null) {
+  const planned = plan("POST", "swap/v2/order", body, referralAccount);
+  if (typeof planned !== "object") throw new Error(`order refused: ${planned}`);
+  const [path, query] = planned.pathAndQuery.split("?");
+  expect(path).toBe("swap/v2/order");
+  return Object.fromEntries(new URLSearchParams(query));
 }
 
 describe("the Jupiter allow-list", () => {
@@ -76,6 +94,67 @@ describe("the Jupiter allow-list", () => {
     for (const routers of ["jupiterz", "dflow", "okx,dflow", "metis,jupiterz,dflow,okx", ""]) {
       expect(plan("POST", "swap/v2/order", { ...order, excludeRouters: routers })).toBe(400);
     }
+  });
+
+  it("sends every order with NoirWire's referral account and a fee of 50 bps, set by the server", () => {
+    expect(NOIRWIRE_FEE_BPS).toBe(50);
+    expect(orderSent(order, REFERRAL)).toEqual({
+      ...order,
+      referralAccount: REFERRAL,
+      referralFee: "50",
+    });
+  });
+
+  it("charges the fee on a price-only order too, one that names no taker", () => {
+    const { taker: _taker, ...priceOnly } = order;
+    expect(orderSent({ ...priceOnly, excludeRouters: "dflow,okx" }, REFERRAL)).toEqual({
+      ...priceOnly,
+      excludeRouters: "dflow,okx",
+      referralAccount: REFERRAL,
+      referralFee: "50",
+    });
+  });
+
+  it("drops a caller's referral account and fee, whatever they say, and writes the server's", () => {
+    for (const asked of [
+      { referralAccount: STRANGER, referralFee: "255" },
+      { referralAccount: STRANGER },
+      { referralFee: "0" },
+      { referralFee: "1" },
+      { referralAccount: REFERRAL, referralFee: "50" },
+      { referralAccount: "", referralFee: "" },
+    ]) {
+      expect(orderSent({ ...order, ...asked }, REFERRAL), JSON.stringify(asked)).toEqual({
+        ...order,
+        referralAccount: REFERRAL,
+        referralFee: "50",
+      });
+    }
+  });
+
+  it("sends no fee at all when no referral account is configured, whatever the caller asked", () => {
+    for (const asked of [{}, { referralAccount: STRANGER, referralFee: "255" }]) {
+      expect(orderSent({ ...order, ...asked }, null)).toEqual(order);
+    }
+  });
+
+  it("still refuses a dropped fee field that is not a string", () => {
+    expect(plan("POST", "swap/v2/order", { ...order, referralFee: 255 }, REFERRAL)).toBe(400);
+  });
+
+  it("adds no fee to the routes that are not orders", () => {
+    expect(
+      plan("POST", "lend/v1/earn/earnings", { user: ADDRESS, positions: "a" }, REFERRAL),
+    ).toEqual({ method: "GET", pathAndQuery: `lend/v1/earn/earnings?user=${ADDRESS}&positions=a` });
+    expect(
+      plan("POST", "lend/v1/earn/earnings", { user: ADDRESS, referralFee: "50" }, REFERRAL),
+    ).toBe(400);
+    const body = { signedTransaction: "AQID", requestId: "request" };
+    expect(plan("POST", "swap/v2/execute", body, REFERRAL)).toEqual({
+      method: "POST",
+      pathAndQuery: "swap/v2/execute",
+      body: JSON.stringify(body),
+    });
   });
 
   it("refuses a body that is not a flat object of strings", () => {

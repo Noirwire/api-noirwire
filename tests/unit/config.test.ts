@@ -36,7 +36,7 @@ describe("the configuration", () => {
       port: 4000,
       network: "devnet",
       rpcUrl: "https://api.devnet.solana.com",
-      jupiter: { url: "https://api.jup.ag", apiKey: null },
+      jupiter: { url: "https://api.jup.ag", apiKey: null, referralAccount: null },
       privatePaymentsUrl: "https://payments.magicblock.app",
       priceHistoryUrl: "https://datapi.jup.ag",
       relayer: null,
@@ -500,6 +500,20 @@ describe("the configuration", () => {
       expect(problems({ ...base, ...rewards, REWARDS_REFERRAL_ACCOUNT: "not-an-address" })).toMatch(
         /REWARDS_REFERRAL_ACCOUNT/,
       );
+    });
+
+    it("name the account every order's fee is paid to, with rewards on or off", () => {
+      const referralAccount = rewards.REWARDS_REFERRAL_ACCOUNT;
+      expect(loadConfig({ ...base, ...rewards }).jupiter.referralAccount).toBe(referralAccount);
+      const alone = loadConfig({ ...base, REWARDS_REFERRAL_ACCOUNT: referralAccount });
+      expect(alone.jupiter.referralAccount).toBe(referralAccount);
+      expect(alone.rewards).toBeNull();
+    });
+
+    it("refuse a referral account that is not an address even with rewards off, naming it once", () => {
+      const refused = problems({ ...base, REWARDS_REFERRAL_ACCOUNT: "not-an-address" });
+      expect(refused.match(/REWARDS_REFERRAL_ACCOUNT/g)).toHaveLength(1);
+      expect(refused).not.toContain("not-an-address");
     });
   });
 });
