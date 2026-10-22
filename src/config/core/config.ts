@@ -70,7 +70,12 @@ export type Config = {
   network: Network;
   /** The RPC provider, key included. */
   rpcUrl: string;
-  jupiter: { url: string; apiKey: string | null };
+  jupiter: {
+    url: string;
+    apiKey: string | null;
+    /** Where every order's fee is paid: the rewards referral account, or null for orders with no NoirWire fee. */
+    referralAccount: string | null;
+  };
   privatePaymentsUrl: string;
   priceHistoryUrl: string;
   relayer: RelayerConfig | null;
@@ -236,6 +241,13 @@ export function loadConfig(env: Env): Config {
     problems.push("SESSION_MAX_AGE_HOURS must be a number of hours, above 0 and at most 720.");
   }
 
+  // One account takes every order's fee and is where rewards read it from, so
+  // the fee is charged whether or not rewards are on.
+  const referralAccount = read("REWARDS_REFERRAL_ACCOUNT") || null;
+  if (referralAccount !== null && !isAddress(referralAccount)) {
+    problems.push("REWARDS_REFERRAL_ACCOUNT must be a Solana address.");
+  }
+
   const umamiUrl = read("UMAMI_URL");
   const umamiWebsite = read("UMAMI_WEBSITE_ID");
   const umamiHostname = read("UMAMI_HOSTNAME");
@@ -265,6 +277,7 @@ export function loadConfig(env: Env): Config {
     jupiter: {
       url: url("JUPITER_API_URL", "https://api.jup.ag"),
       apiKey: read("JUPITER_API_KEY") || null,
+      referralAccount,
     },
     privatePaymentsUrl: url("MAGICBLOCK_API_URL", "https://payments.magicblock.app"),
     priceHistoryUrl: url("PRICE_HISTORY_API_URL", "https://datapi.jup.ag"),
@@ -369,7 +382,8 @@ const offsetInstant = z.iso.datetime({ offset: true });
  * With all four set, each must be right or the start is refused: a start
  * that begins mid-week or a fee read from the wrong account would record
  * fees nobody paid, or under the wrong week. A problem names the variable
- * and never its value.
+ * and never its value. The referral account is checked with the order fee
+ * it also names, in `loadConfig`.
  *
  * `REWARDS_DAILY_JOIN_CAP` bounds how many keys become members on one UTC
  * day, whoever asks: a member costs nothing to make, so without it one
@@ -399,9 +413,6 @@ function rewardsConfig(
   const seasonStartMs = isoInstant.safeParse(seasonStart).success ? Date.parse(seasonStart) : NaN;
   if (!isWeekStart(seasonStartMs)) {
     problems.push("REWARDS_SEASON_START must be an ISO date that is a Monday, 00:00 UTC.");
-  }
-  if (!isAddress(referralAccount)) {
-    problems.push("REWARDS_REFERRAL_ACCOUNT must be a Solana address.");
   }
   const dailyJoinCap = count("REWARDS_DAILY_JOIN_CAP", 2_000, 1_000_000);
   const doubleHour = read("REWARDS_DOUBLE_HOUR_START");

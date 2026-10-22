@@ -16,11 +16,15 @@ const order = {
   taker: ADDRESS,
   slippageBps: "50",
 };
+const REFERRAL = "BPFLoaderUpgradeab1e11111111111111111111111";
+const STRANGER = "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM";
+/** What Jupiter is sent for `order`: the caller's fields, then the server's fee. */
+const orderWithFee = { ...order, referralAccount: REFERRAL, referralFee: "50" };
 
 let api: Api;
 
 beforeAll(async () => {
-  api = await startApi();
+  api = await startApi({ REWARDS_REFERRAL_ACCOUNT: REFERRAL });
 });
 afterAll(() => api.close());
 beforeEach(() => {
@@ -310,16 +314,24 @@ describe("POST /v1/rpc", () => {
 });
 
 describe("GET|POST /v1/jupiter/*", () => {
-  it("turns an order posted as a body into Jupiter's GET, with the server's key", async () => {
+  it("turns an order posted as a body into Jupiter's GET, with the server's key and fee", async () => {
     const response = await api.call("/v1/jupiter/swap/v2/order", { body: order });
 
     expect(response.status).toBe(200);
     const [sent] = api.providers.sentTo("jupiter");
     expect(sent.method).toBe("GET");
     expect(sent.body).toBe("");
-    expect(sent.path).toBe(`/swap/v2/order?${new URLSearchParams(order).toString()}`);
+    expect(sent.path).toBe(`/swap/v2/order?${new URLSearchParams(orderWithFee).toString()}`);
     expect(sent.headers["x-api-key"]).toBe("server-jupiter-key");
     expect(sent.headers.authorization).toBeUndefined();
+  });
+
+  it("sends the server's fee in place of the one a caller names", async () => {
+    const asked = { ...order, referralAccount: STRANGER, referralFee: "255" };
+    expect((await api.call("/v1/jupiter/swap/v2/order", { body: asked })).status).toBe(200);
+    const [sent] = api.providers.sentTo("jupiter");
+    expect(sent.path).toBe(`/swap/v2/order?${new URLSearchParams(orderWithFee).toString()}`);
+    expect(sent.path).not.toContain(STRANGER);
   });
 
   it("refuses an order carrying a field it does not know", async () => {

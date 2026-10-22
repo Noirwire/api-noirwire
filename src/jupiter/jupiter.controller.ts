@@ -21,6 +21,7 @@ import {
   JUPITER_MAX_BODY_BYTES,
   JUPITER_MAX_RESPONSE_BYTES,
   jupiterRoute,
+  NOIRWIRE_FEE_BPS,
   planJupiter,
   VAULTS_PATH,
   VAULTS_STALE_MS,
@@ -109,7 +110,7 @@ export class JupiterController {
       "",
       "| Path | Sent to Jupiter as | Body |",
       "| --- | --- | --- |",
-      "| `swap/v2/order` | GET with a query | Only `inputMint`, `outputMint`, `amount`, `taker`, `slippageBps`, `referralAccount`, `referralFee`, all strings |",
+      "| `swap/v2/order` | GET with a query | Only `inputMint`, `outputMint`, `amount`, `taker`, `slippageBps`, all strings, and `excludeRouters` with exactly the value `dflow,okx`. `referralAccount` and `referralFee` are taken and dropped: this server writes them |",
       "| `swap/v2/execute` | POST, body unchanged | A signed swap and its request id |",
       "| `lend/v1/earn/earnings` | GET with a query | Only `user`, `positions`, both strings |",
       "| `lend/v1/earn/deposit` | POST, body unchanged | Jupiter Lend's deposit request |",
@@ -119,9 +120,11 @@ export class JupiterController {
       "",
       "Jupiter takes an order and an earnings read as a GET with the address in the query. The wallet still posts them here as a JSON body and the query is built on this side, so an address never sits in a URL that an access log on the way would record.",
       "",
+      `**NoirWire's fee is set here, never by the caller.** Every order, a price-only one with no \`taker\` included, is sent with NoirWire's referral account (\`REWARDS_REFERRAL_ACCOUNT\`) and a fee of ${NOIRWIRE_FEE_BPS} basis points. A \`referralAccount\` or \`referralFee\` in the body is dropped, whatever its value, so no caller can lower the fee, raise it or send it elsewhere. With no referral account configured, an order carries no NoirWire fee.`,
+      "",
       "**Who calls it:** the wallets, when a trade is quoted, reviewed and placed, and on the Earn screen.",
       "",
-      "**Refused:** any other path or method (404); for the two paths that become a query, a body that is not a flat object of the listed string fields (400), which is what stops a request from naming a separate payer, a receiver or a router.",
+      "**Refused:** any other path or method (404); for the two paths that become a query, a body that is not a flat object of the listed string fields (400), which is what stops a request from naming a separate payer, a receiver or a router. `excludeRouters` other than `dflow,okx` is refused the same way: a request can leave out the two routers whose swap instruction the wallet cannot check, and choose no other.",
       "",
       "**Contains wallet addresses: yes.** An order names the portfolio as `taker`; an earnings read names it as `user`; a signed swap is a whole transaction.",
       "",
@@ -221,7 +224,8 @@ export class JupiterController {
     });
     if ("refused" in admitted) return send(res, admitted.refused);
 
-    const plan = planJupiter(route, method, path, admitted.body);
+    const { referralAccount } = this.config.jupiter;
+    const plan = planJupiter(route, method, path, admitted.body, referralAccount);
     if ("refused" in plan) return send(res, plan.refused);
     if (method === "GET" && path === VAULTS_PATH) return send(res, await this.vaultList());
     // Jupiter's own allowance for this server's key, shared fairly between the sessions asking.
