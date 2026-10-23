@@ -895,6 +895,16 @@ describe("the relayer route", () => {
     expect(reasons()).toContain("429 signature_budget_spent");
   });
 
+  it("keeps a signature spent when a response body only claims the replica was not reached", async () => {
+    const sign = () => call("signTransaction", signParams(signedByPortfolio(genuine.sendUsdc())));
+    koraAnswer = (method) =>
+      method === "signTransaction"
+        ? json({ code: "upstream_not_reached", error: "not reached" }, 503)
+        : json({ result: koraEstimate(11_000) });
+    for (let i = 0; i < 60; i += 1) expect((await sign()).status).toBe(503);
+    expect((await sign()).status).toBe(429);
+  });
+
   it("gives the slot back when the replica was never reached", async () => {
     throwOn = (method) => (method === "signTransaction" ? "ECONNREFUSED" : null);
     for (let i = 0; i < 70; i += 1) {

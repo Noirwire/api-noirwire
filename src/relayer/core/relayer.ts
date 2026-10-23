@@ -19,7 +19,7 @@ import {
   type QuotaStore,
   type RouteLimits,
 } from "../../common/core/quota.js";
-import type { Relay } from "../../common/core/relay.js";
+import { wasNeverConnected, type Relay } from "../../common/core/relay.js";
 import { base58, bytesEqual } from "../../chain/core/bytes.js";
 import { signedBy } from "../../chain/core/signatures.js";
 import type { RelayerConfig } from "../../config/core/config.js";
@@ -510,7 +510,7 @@ export function createRelayer(deps: RelayerDeps): Relayer {
     // Never connected: this replica did not receive the request. The only
     // case the relay itself proves, so the only one whose signature slot is given back.
     if (replied.status === 503) {
-      if (codeOf(replied) === "upstream_not_reached") proveUnsigned();
+      if (wasNeverConnected(replied)) proveUnsigned();
       return unavailable();
     }
     // Turned away for this server's credentials (logged by the relay as

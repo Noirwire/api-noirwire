@@ -22,6 +22,16 @@ function neverReached(error: unknown): boolean {
   return typeof cause?.code === "string" && NEVER_CONNECTED.includes(cause.code);
 }
 
+/**
+ * The answers this relay itself made from a failed connection. Held by
+ * identity, never by what an answer says: an upstream's body can carry any
+ * code it likes, but it cannot put an object in this set.
+ */
+const neverConnectedAnswers = new WeakSet<Answer>();
+
+/** Whether `from` is the relay's own answer for a connection that was never made. */
+export const wasNeverConnected = (from: Answer): boolean => neverConnectedAnswers.has(from);
+
 function isJson(text: string): boolean {
   try {
     JSON.parse(text);
@@ -109,9 +119,10 @@ export function createRelay(deps: { fetch: typeof fetch; log: Log }): Relay {
       // A connection that was never made is told apart from one that broke:
       // the first means the upstream never saw the request, which matters to
       // a caller deciding whether what it sent may still be acted on.
-      return neverReached(error)
-        ? failed("upstream_not_reached", "upstream_not_reached")
-        : failed("upstream_failed", "upstream_unreachable");
+      if (!neverReached(error)) return failed("upstream_failed", "upstream_unreachable");
+      const answered = failed("upstream_not_reached", "upstream_not_reached");
+      neverConnectedAnswers.add(answered);
+      return answered;
     } finally {
       clearTimeout(timer);
     }
