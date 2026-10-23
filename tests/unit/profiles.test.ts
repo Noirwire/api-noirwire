@@ -4,6 +4,7 @@ import { base58 } from "../../src/chain/core/bytes.js";
 import { signerOf } from "../../src/chain/core/signatures.js";
 import type { LogLine } from "../../src/common/core/log.js";
 import { createMemoryQuotaStore, type Caller } from "../../src/common/core/quota.js";
+import { spendInMemory } from "../../src/common/core/spend.js";
 import {
   CONFIRM_TIMEOUT_MS,
   createProfiles,
@@ -72,6 +73,7 @@ function profiles(options: { off?: boolean; dailyCreateCap?: number } = {}): Pro
           },
         },
     quotas: createMemoryQuotaStore(),
+    spend: spendInMemory(createMemoryQuotaStore()),
     log: (line) => void logged.push(line),
     now: () => clock,
     sleep: (ms) => {

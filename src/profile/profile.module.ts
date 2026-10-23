@@ -4,8 +4,9 @@ import { signerOf } from "../chain/core/signatures.js";
 import type { Log } from "../common/core/log.js";
 import type { QuotaStore } from "../common/core/quota.js";
 import type { Relay } from "../common/core/relay.js";
+import type { SpendStore } from "../common/core/spend.js";
 import type { Config } from "../config/core/config.js";
-import { CONFIG, LOG, PROFILES, QUOTAS, RELAY } from "../tokens.js";
+import { CONFIG, LOG, PROFILES, QUOTAS, RELAY, SPEND } from "../tokens.js";
 import { createProfiles } from "./core/profiles.js";
 import { createRollup } from "./core/rollup.js";
 import { ProfileController } from "./profile.controller.js";
@@ -15,8 +16,14 @@ import { ProfileController } from "./profile.controller.js";
   providers: [
     {
       provide: PROFILES,
-      inject: [CONFIG, RELAY, QUOTAS, LOG],
-      useFactory: ({ profile }: Config, relay: Relay, quotas: QuotaStore, log: Log) =>
+      inject: [CONFIG, RELAY, QUOTAS, SPEND, LOG],
+      useFactory: (
+        { profile }: Config,
+        relay: Relay,
+        quotas: QuotaStore,
+        spend: SpendStore,
+        log: Log,
+      ) =>
         createProfiles({
           upstream: profile && {
             rollup: createRollup({ url: profile.rollupUrl, relay, log }),
@@ -29,6 +36,7 @@ import { ProfileController } from "./profile.controller.js";
             signAsGate: signerOf(profile.gateSecretKey),
           },
           quotas,
+          spend,
           log,
         }),
     },

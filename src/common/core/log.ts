@@ -11,6 +11,16 @@ export type LogLine =
   /** Something an operator has to fix: a provider turned down this server's own credentials. */
   | { event: "operator_error"; route: string; status: number; reason: string }
   | { event: "error"; route: string; name: string }
-  | { event: "lifecycle"; state: "listening" | "stopping" | "config_refused" | "crashed" };
+  | {
+      event: "lifecycle";
+      state:
+        | "listening"
+        | "stopping"
+        | "config_refused"
+        | "crashed"
+        /** Where the budgets that bound spend are counted: in the database, or in this process's memory. */
+        | "spend_in_database"
+        | "spend_in_memory";
+    };
 
 export type Log = (line: LogLine) => void;
