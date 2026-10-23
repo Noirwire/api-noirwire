@@ -484,18 +484,16 @@ export function createRelayer(deps: RelayerDeps): Relayer {
       if (!signing) return forward(method, sent, replica.url, upstream);
 
       // Counted only once the relayer itself would sign, so that posting
-      // rubbish cannot spend the budget everyone shares, and given back when
-      // nothing was signed after all.
-      if (!quotas.take(SIGNATURE_BUDGET, now())) {
+      // rubbish cannot spend the budget everyone shares.
+      const receipt = quotas.reserve(SIGNATURE_BUDGET, now());
+      if (!receipt) {
         log({ event: "refusal", route: ROUTE, status: 429, reason: "signature_budget_spent" });
         return rateRefusal();
       }
-      const outcome = await forward(method, sent, replica.url, upstream).catch((error: unknown) => {
-        quotas.refund(SIGNATURE_BUDGET, now());
-        throw error;
-      });
-      if (outcome.status !== 200) quotas.refund(SIGNATURE_BUDGET, now());
-      return outcome;
+      // Once the sign request is on its way a signature may exist, so anything
+      // short of the replica proving otherwise (a thrown error, a lost or
+      // malformed answer, an odd status) leaves the slot spent.
+      return forward(method, sent, replica.url, upstream, () => quotas.refund(receipt));
     },
   };
 
@@ -504,23 +502,31 @@ export function createRelayer(deps: RelayerDeps): Relayer {
     sent: Forwarded,
     replicaUrl: string,
     upstream: RelayerConfig,
+    proveUnsigned: () => void = () => undefined,
   ): Promise<Answer> {
     const signing = method === "signTransaction";
     const replied = await ask(upstream, replicaUrl, method, sent.params);
     // Never connected: this replica did not receive the request.
-    if (replied.status === 503) return unavailable();
+    if (replied.status === 503) {
+      if (codeOf(replied) === "upstream_not_reached") proveUnsigned();
+      return unavailable();
+    }
     // Turned away for this server's credentials (logged by the relay as
     // an operator error) or for its method: the replica did nothing with
     // the request, so the wallet may build again for another. Never a 401,
     // which would blame the caller's session.
     if (codeOf(replied) === "upstream_refused" || replied.status === 405) {
       log({ event: "refusal", route: ROUTE, status: 503, reason: "replica_refused_the_request" });
+      proveUnsigned();
       return unavailable();
     }
     if (replied.status !== 200) return refusal("no_answer");
 
     const payload = parsed(replied) as RelayerAnswer | null;
-    if (payload?.error) return refused(reasonOf(payload.error));
+    if (payload?.error) {
+      proveUnsigned();
+      return refused(reasonOf(payload.error));
+    }
     const result = payload?.result;
     const safe = isObject(result) ? checked(method, result, sent, upstream) : null;
     if (typeof safe === "string") return refused(safe);

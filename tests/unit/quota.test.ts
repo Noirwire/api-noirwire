@@ -102,14 +102,32 @@ describe("the quota store", () => {
   it("gives a counted one back, only while its window is live and never below none", () => {
     const quotas = createMemoryQuotaStore();
     const one: Budget[] = [{ scope: "global", key: "k", limit: 1, windowMs: MINUTE_MS }];
-    expect(quotas.take(one, 0)).toBe(true);
-    expect(quotas.take(one, 1)).toBe(false);
-    quotas.refund(one, 2);
-    quotas.refund(one, 3);
+    const receipt = quotas.reserve(one, 0);
+    expect(receipt).not.toBeNull();
+    expect(quotas.reserve(one, 1)).toBeNull();
+    quotas.refund(receipt!);
     expect(quotas.take(one, 4)).toBe(true);
     expect(quotas.take(one, 5)).toBe(false);
-    quotas.refund(one, MINUTE_MS * 2);
-    expect(quotas.take(one, MINUTE_MS * 2)).toBe(true);
+  });
+
+  it("refunds a receipt once: a second refund changes nothing", () => {
+    const quotas = createMemoryQuotaStore();
+    const two: Budget[] = [{ scope: "global", key: "k", limit: 2, windowMs: MINUTE_MS }];
+    const first = quotas.reserve(two, 0)!;
+    expect(quotas.take(two, 1)).toBe(true);
+    quotas.refund(first);
+    quotas.refund(first);
+    expect(quotas.take(two, 2)).toBe(true);
+    expect(quotas.take(two, 3)).toBe(false);
+  });
+
+  it("does not let a late refund take from a window that replaced the one it counted", () => {
+    const quotas = createMemoryQuotaStore();
+    const one: Budget[] = [{ scope: "global", key: "k", limit: 1, windowMs: MINUTE_MS }];
+    const old = quotas.reserve(one, 0)!;
+    expect(quotas.take(one, MINUTE_MS + 1)).toBe(true);
+    quotas.refund(old);
+    expect(quotas.take(one, MINUTE_MS + 2)).toBe(false);
   });
 
   it("keeps a flood of sessions from pushing out addresses, and the other way round", () => {
