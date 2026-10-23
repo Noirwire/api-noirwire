@@ -484,7 +484,8 @@ export function createRelayer(deps: RelayerDeps): Relayer {
       if (!signing) return forward(method, sent, replica.url, upstream);
 
       // Counted only once the relayer itself would sign, so that posting
-      // rubbish cannot spend the budget everyone shares.
+      // rubbish cannot spend the budget everyone shares. A refusal at the
+      // estimate step happens before this, so a flood of them stays free.
       const receipt = quotas.reserve(SIGNATURE_BUDGET, now());
       if (!receipt) {
         log({ event: "refusal", route: ROUTE, status: 429, reason: "signature_budget_spent" });
@@ -506,7 +507,8 @@ export function createRelayer(deps: RelayerDeps): Relayer {
   ): Promise<Answer> {
     const signing = method === "signTransaction";
     const replied = await ask(upstream, replicaUrl, method, sent.params);
-    // Never connected: this replica did not receive the request.
+    // Never connected: this replica did not receive the request. The only
+    // case the relay itself proves, so the only one whose signature slot is given back.
     if (replied.status === 503) {
       if (codeOf(replied) === "upstream_not_reached") proveUnsigned();
       return unavailable();
@@ -517,16 +519,12 @@ export function createRelayer(deps: RelayerDeps): Relayer {
     // which would blame the caller's session.
     if (codeOf(replied) === "upstream_refused" || replied.status === 405) {
       log({ event: "refusal", route: ROUTE, status: 503, reason: "replica_refused_the_request" });
-      proveUnsigned();
       return unavailable();
     }
     if (replied.status !== 200) return refusal("no_answer");
 
     const payload = parsed(replied) as RelayerAnswer | null;
-    if (payload?.error) {
-      proveUnsigned();
-      return refused(reasonOf(payload.error));
-    }
+    if (payload?.error) return refused(reasonOf(payload.error));
     const result = payload?.result;
     const safe = isObject(result) ? checked(method, result, sent, upstream) : null;
     if (typeof safe === "string") return refused(safe);

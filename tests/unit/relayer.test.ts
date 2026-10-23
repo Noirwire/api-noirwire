@@ -820,19 +820,9 @@ describe("the relayer route", () => {
     ).toBe(200);
   });
 
-  it("leaves the shared budget unspent when the relayer refuses to price or to sign", async () => {
-    const refuse = () =>
+  it("leaves the shared budget unspent when the relayer refuses at the estimate step", async () => {
+    koraAnswer = () =>
       json({ jsonrpc: "2.0", error: { code: -32000, message: "no funds" }, id: 1 });
-    koraAnswer = refuse;
-    for (let i = 0; i < 70; i += 1) {
-      const answer = await call(
-        "signTransaction",
-        signParams(signedByPortfolio(genuine.sendUsdc())),
-      );
-      expect(answer.status).toBe(422);
-    }
-    koraAnswer = (method) =>
-      method === "signTransaction" ? refuse() : json({ result: koraEstimate(11_000) });
     for (let i = 0; i < 70; i += 1) {
       const answer = await call(
         "signTransaction",
@@ -884,6 +874,23 @@ describe("the relayer route", () => {
 
     koraAnswer = (method, params) =>
       method === "signTransaction" ? signIt(params) : json({ result: koraEstimate(11_000) });
+    expect((await sign()).status).toBe(429);
+    expect(reasons()).toContain("429 signature_budget_spent");
+  });
+
+  it("keeps a signature spent when the sign request is answered with an error or a 405 after dispatch", async () => {
+    const sign = () => call("signTransaction", signParams(signedByPortfolio(genuine.sendUsdc())));
+    // A signer that signs and then answers 200 with an error.
+    koraAnswer = (method) =>
+      method === "signTransaction"
+        ? json({ jsonrpc: "2.0", error: { code: -32000, message: "late" }, id: 1 })
+        : json({ result: koraEstimate(11_000) });
+    for (let i = 0; i < 30; i += 1) expect((await sign()).status).toBe(422);
+    koraAnswer = (method) =>
+      method === "signTransaction"
+        ? new Response(null, { status: 405 })
+        : json({ result: koraEstimate(11_000) });
+    for (let i = 0; i < 30; i += 1) expect((await sign()).status).toBe(503);
     expect((await sign()).status).toBe(429);
     expect(reasons()).toContain("429 signature_budget_spent");
   });
