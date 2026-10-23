@@ -103,4 +103,18 @@ describe("what the relayer charges", () => {
     expect(lamportsInUsdc(2_263_208n, 200)).toBe(452_642n);
     expect(lamportsInUsdc(1n, 0.01)).toBe(1n);
   });
+
+  it("prices in whole cents without a float's stray fraction rounding a cent up", () => {
+    // 150.1 * 100 is 15010.000000000002 as a double.
+    expect(lamportsInUsdc(100_000n, 150.1)).toBe(15_010n);
+    expect(lamportsInUsdc(100_000n, 150.101)).toBe(15_011n);
+    expect(lamportsInUsdc(100_000n, 0.29)).toBe(29n);
+    expect(lamportsInUsdc(100_000n, 1.1)).toBe(110n);
+  });
+
+  it("refuses an input with the wrong number of signatures", () => {
+    const transaction = genuine.sendUsdc();
+    transaction.signatures = [transaction.signatures[0]];
+    expect(readRelayed(transaction, pins)).toEqual({ ok: false, reason: "signers" });
+  });
 });

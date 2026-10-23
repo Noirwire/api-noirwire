@@ -820,6 +820,103 @@ describe("the relayer route", () => {
     ).toBe(200);
   });
 
+  it("leaves the shared budget unspent when the relayer refuses at the estimate step", async () => {
+    koraAnswer = () =>
+      json({ jsonrpc: "2.0", error: { code: -32000, message: "no funds" }, id: 1 });
+    for (let i = 0; i < 70; i += 1) {
+      const answer = await call(
+        "signTransaction",
+        signParams(signedByPortfolio(genuine.sendUsdc())),
+      );
+      expect(answer.status).toBe(422);
+    }
+    expect(reasons()).not.toContain("429 signature_budget_spent");
+    koraAnswer = (method, params) =>
+      method === "estimateTransactionFee"
+        ? json({ result: koraEstimate(11_000) })
+        : json({
+            result: {
+              signed_transaction: coSigned(params.transaction as string, relayer),
+              signer_pubkey: relayer.publicKey.toBase58(),
+            },
+          });
+    let signed = 0;
+    for (let i = 0; i < 61; i += 1) {
+      const answer = await call(
+        "signTransaction",
+        signParams(signedByPortfolio(genuine.sendUsdc())),
+      );
+      if (answer.status === 200) signed += 1;
+    }
+    expect(signed).toBe(60);
+  });
+
+  it("keeps a signature spent when the answer to the sign request is lost or unreadable", async () => {
+    const signIt = (params: Params) =>
+      json({
+        result: {
+          signed_transaction: coSigned(params.transaction as string, relayer),
+          signer_pubkey: relayer.publicKey.toBase58(),
+        },
+      });
+    const sign = () => call("signTransaction", signParams(signedByPortfolio(genuine.sendUsdc())));
+
+    // The connection breaks after the request was written.
+    throwOn = (method) => (method === "signTransaction" ? "ECONNRESET" : null);
+    for (let i = 0; i < 30; i += 1) expect((await sign()).status).not.toBe(200);
+    throwOn = null;
+    // The replica answers with something that is not a signed transaction.
+    koraAnswer = (method) =>
+      method === "signTransaction"
+        ? json({ result: { signed_transaction: "garbage", signer_pubkey: "x" } })
+        : json({ result: koraEstimate(11_000) });
+    for (let i = 0; i < 30; i += 1) expect((await sign()).status).not.toBe(200);
+
+    koraAnswer = (method, params) =>
+      method === "signTransaction" ? signIt(params) : json({ result: koraEstimate(11_000) });
+    expect((await sign()).status).toBe(429);
+    expect(reasons()).toContain("429 signature_budget_spent");
+  });
+
+  it("keeps a signature spent when the sign request is answered with an error or a 405 after dispatch", async () => {
+    const sign = () => call("signTransaction", signParams(signedByPortfolio(genuine.sendUsdc())));
+    // A signer that signs and then answers 200 with an error.
+    koraAnswer = (method) =>
+      method === "signTransaction"
+        ? json({ jsonrpc: "2.0", error: { code: -32000, message: "late" }, id: 1 })
+        : json({ result: koraEstimate(11_000) });
+    for (let i = 0; i < 30; i += 1) expect((await sign()).status).toBe(422);
+    koraAnswer = (method) =>
+      method === "signTransaction"
+        ? new Response(null, { status: 405 })
+        : json({ result: koraEstimate(11_000) });
+    for (let i = 0; i < 30; i += 1) expect((await sign()).status).toBe(503);
+    expect((await sign()).status).toBe(429);
+    expect(reasons()).toContain("429 signature_budget_spent");
+  });
+
+  it("keeps a signature spent when a response body only claims the replica was not reached", async () => {
+    const sign = () => call("signTransaction", signParams(signedByPortfolio(genuine.sendUsdc())));
+    koraAnswer = (method) =>
+      method === "signTransaction"
+        ? json({ code: "upstream_not_reached", error: "not reached" }, 503)
+        : json({ result: koraEstimate(11_000) });
+    for (let i = 0; i < 60; i += 1) expect((await sign()).status).toBe(503);
+    expect((await sign()).status).toBe(429);
+  });
+
+  it("gives the slot back when the replica was never reached", async () => {
+    throwOn = (method) => (method === "signTransaction" ? "ECONNREFUSED" : null);
+    for (let i = 0; i < 70; i += 1) {
+      const answer = await call(
+        "signTransaction",
+        signParams(signedByPortfolio(genuine.sendUsdc())),
+      );
+      expect(answer.status).toBe(503);
+    }
+    expect(reasons()).not.toContain("429 signature_budget_spent");
+  });
+
   it("rations signatures by the hour as well as by the minute", async () => {
     let signed = 0;
     for (let minute = 0; minute < 11; minute += 1) {

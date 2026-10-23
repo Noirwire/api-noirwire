@@ -1,4 +1,5 @@
 import { createApp } from "./app.js";
+import { exitOnCrash } from "./common/core/crash.js";
 import type { Log } from "./common/core/log.js";
 import { ConfigError, loadConfig, type Config } from "./config/core/config.js";
 
@@ -18,6 +19,12 @@ function configOrExit(): Config {
     );
     process.exit(1);
   }
+}
+
+// Node would exit on these anyway; this says so in the log first, with a fixed
+// word and never the error, which may carry an address or a credential.
+for (const event of ["unhandledRejection", "uncaughtException"] as const) {
+  process.on(event, () => exitOnCrash(log, (code) => process.exit(code)));
 }
 
 const config = configOrExit();

@@ -286,6 +286,18 @@ describe("the creation budgets", () => {
     expect((await submit(api, genuine.close())).status).toBe(200);
   });
 
+  it("does not spend a session's hourly creations on one the daily cap refused", async () => {
+    const api = profiles({ dailyCreateCap: 1 });
+    const caller = stranger();
+    expect((await submit(api, creation(), stranger())).status).toBe(200);
+    for (let i = 0; i < CREATIONS_PER_HOUR_PER_SESSION + 2; i += 1) {
+      expect(await outcome(submit(api, creation(), caller))).toEqual([429, "rate_limited"]);
+    }
+    expect(
+      logged.filter((line) => "reason" in line && line.reason === "daily_create_cap_reached"),
+    ).toHaveLength(CREATIONS_PER_HOUR_PER_SESSION + 2);
+  });
+
   it("signs creations again once the cap's 24 hours are over, and not a moment before", async () => {
     const api = profiles({ dailyCreateCap: 1 });
     expect((await submit(api, creation())).status).toBe(200);

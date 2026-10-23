@@ -21,7 +21,20 @@ export interface QuotaStore {
    * cannot be counted. A request that is refused is not counted.
    */
   take(budgets: readonly Budget[], now?: number): boolean;
+  /** `take`, with a receipt for exactly what it counted, or null when it counted nothing. */
+  reserve(budgets: readonly Budget[], now?: number): QuotaReceipt | null;
+  /**
+   * Gives back what one `reserve` counted, for work that provably cost
+   * nothing. Each window counted is given back at most once, and only while
+   * it is the very window that was counted: one that has finished and been
+   * replaced is left alone.
+   */
+  refund(receipt: QuotaReceipt): void;
 }
+
+declare const receiptBrand: unique symbol;
+/** What one `reserve` counted. Opaque: only the store that issued it can refund it. */
+export type QuotaReceipt = { readonly [receiptBrand]: true };
 
 /**
  * The most keys counted at once per scope, so the tables cannot grow without
@@ -63,29 +76,54 @@ export function createMemoryQuotaStore(maxTrackedKeys = MAX_TRACKED_KEYS): Quota
     return table.windows.size + newcomers <= maxTrackedKeys;
   }
 
-  return {
-    take(budgets, now = Date.now()) {
+  const claimed = new WeakMap<QuotaReceipt, Window[]>();
+
+  function reserve(budgets: readonly Budget[], now = Date.now()): QuotaReceipt | null {
+    {
       const newcomers: Record<QuotaScope, number> = { session: 0, ip: 0, global: 0 };
       for (const budget of budgets) {
         const { windows } = tables[budget.scope];
         const current = windows.get(budget.key);
         if (live(current, now)) {
-          if (current.count >= budget.limit) return false;
+          if (current.count >= budget.limit) return null;
         } else {
-          if (budget.limit < 1) return false;
+          if (budget.limit < 1) return null;
           if (!current) newcomers[budget.scope] += 1;
         }
       }
       for (const scope of ["session", "ip", "global"] as const) {
-        if (newcomers[scope] > 0 && !roomFor(tables[scope], newcomers[scope], now)) return false;
+        if (newcomers[scope] > 0 && !roomFor(tables[scope], newcomers[scope], now)) return null;
       }
+      const counted: Window[] = [];
       for (const budget of budgets) {
         const { windows } = tables[budget.scope];
         const current = windows.get(budget.key);
-        if (live(current, now)) current.count += 1;
-        else windows.set(budget.key, { startedAt: now, windowMs: budget.windowMs, count: 1 });
+        if (live(current, now)) {
+          current.count += 1;
+          counted.push(current);
+        } else {
+          const fresh = { startedAt: now, windowMs: budget.windowMs, count: 1 };
+          windows.set(budget.key, fresh);
+          counted.push(fresh);
+        }
       }
-      return true;
+      const receipt = {} as QuotaReceipt;
+      claimed.set(receipt, counted);
+      return receipt;
+    }
+  }
+
+  return {
+    take: (budgets, now) => reserve(budgets, now) !== null,
+    reserve,
+
+    refund(receipt) {
+      const counted = claimed.get(receipt);
+      if (!counted) return;
+      claimed.delete(receipt);
+      for (const window of counted) {
+        if (window.count > 0) window.count -= 1;
+      }
     },
   };
 }

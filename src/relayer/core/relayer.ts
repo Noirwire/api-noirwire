@@ -19,7 +19,7 @@ import {
   type QuotaStore,
   type RouteLimits,
 } from "../../common/core/quota.js";
-import type { Relay } from "../../common/core/relay.js";
+import { wasNeverConnected, type Relay } from "../../common/core/relay.js";
 import { base58, bytesEqual } from "../../chain/core/bytes.js";
 import { signedBy } from "../../chain/core/signatures.js";
 import type { RelayerConfig } from "../../config/core/config.js";
@@ -464,13 +464,6 @@ export function createRelayer(deps: RelayerDeps): Relayer {
         return unavailable();
       }
       if (typeof sent === "string") return refused(sent);
-      // Counted only for a transaction that would really be signed, so that
-      // posting rubbish cannot spend the budget everyone shares.
-      if (signing && !quotas.take(SIGNATURE_BUDGET, now())) {
-        log({ event: "refusal", route: ROUTE, status: 429, reason: "signature_budget_spent" });
-        return rateRefusal();
-      }
-
       // The transaction names its fee payer, so only that key's replica can serve it.
       const replica = upstream.replicas.find((entry) => entry.feePayer === sent.params.signer_key);
       if (!replica) return refused("fee_payer_not_pinned");
@@ -488,32 +481,60 @@ export function createRelayer(deps: RelayerDeps): Relayer {
         if (!isObject(quoted)) return unavailable();
         if (!pricesAgree(quoted, sent.solPrice)) return refused("price_disagreement");
       }
-      const replied = await ask(upstream, replica.url, method, sent.params);
-      // Never connected: this replica did not receive the request.
-      if (replied.status === 503) return unavailable();
-      // Turned away for this server's credentials (logged by the relay as
-      // an operator error) or for its method: the replica did nothing with
-      // the request, so the wallet may build again for another. Never a 401,
-      // which would blame the caller's session.
-      if (codeOf(replied) === "upstream_refused" || replied.status === 405) {
-        log({ event: "refusal", route: ROUTE, status: 503, reason: "replica_refused_the_request" });
-        return unavailable();
-      }
-      if (replied.status !== 200) return refusal("no_answer");
+      if (!signing) return forward(method, sent, replica.url, upstream);
 
-      const payload = parsed(replied) as RelayerAnswer | null;
-      if (payload?.error) return refused(reasonOf(payload.error));
-      const result = payload?.result;
-      const safe = isObject(result) ? checked(method, result, sent, upstream) : null;
-      if (typeof safe === "string") return refused(safe);
-      if (!safe) {
-        log({ event: "refusal", route: ROUTE, status: 502, reason: "answer_not_pinned_keys" });
-        return refusal("no_answer");
+      // Counted only once the relayer itself would sign, so that posting
+      // rubbish cannot spend the budget everyone shares. A refusal at the
+      // estimate step happens before this, so a flood of them stays free.
+      const receipt = quotas.reserve(SIGNATURE_BUDGET, now());
+      if (!receipt) {
+        log({ event: "refusal", route: ROUTE, status: 429, reason: "signature_budget_spent" });
+        return rateRefusal();
       }
-      // A price is wrapped as the relayer wraps it. A signed transaction is
-      // handed back bare, with its id: this route never broadcasts, so the
-      // wallet can record the id before anything is sent.
-      return answer(200, signing ? safe : { result: safe });
+      // Once the sign request is on its way a signature may exist, so anything
+      // short of the replica proving otherwise (a thrown error, a lost or
+      // malformed answer, an odd status) leaves the slot spent.
+      return forward(method, sent, replica.url, upstream, () => quotas.refund(receipt));
     },
   };
+
+  async function forward(
+    method: string,
+    sent: Forwarded,
+    replicaUrl: string,
+    upstream: RelayerConfig,
+    proveUnsigned: () => void = () => undefined,
+  ): Promise<Answer> {
+    const signing = method === "signTransaction";
+    const replied = await ask(upstream, replicaUrl, method, sent.params);
+    // Never connected: this replica did not receive the request. The only
+    // case the relay itself proves, so the only one whose signature slot is given back.
+    if (replied.status === 503) {
+      if (wasNeverConnected(replied)) proveUnsigned();
+      return unavailable();
+    }
+    // Turned away for this server's credentials (logged by the relay as
+    // an operator error) or for its method: the replica did nothing with
+    // the request, so the wallet may build again for another. Never a 401,
+    // which would blame the caller's session.
+    if (codeOf(replied) === "upstream_refused" || replied.status === 405) {
+      log({ event: "refusal", route: ROUTE, status: 503, reason: "replica_refused_the_request" });
+      return unavailable();
+    }
+    if (replied.status !== 200) return refusal("no_answer");
+
+    const payload = parsed(replied) as RelayerAnswer | null;
+    if (payload?.error) return refused(reasonOf(payload.error));
+    const result = payload?.result;
+    const safe = isObject(result) ? checked(method, result, sent, upstream) : null;
+    if (typeof safe === "string") return refused(safe);
+    if (!safe) {
+      log({ event: "refusal", route: ROUTE, status: 502, reason: "answer_not_pinned_keys" });
+      return refusal("no_answer");
+    }
+    // A price is wrapped as the relayer wraps it. A signed transaction is
+    // handed back bare, with its id: this route never broadcasts, so the
+    // wallet can record the id before anything is sent.
+    return answer(200, signing ? safe : { result: safe });
+  }
 }

@@ -382,14 +382,19 @@ export function createProfiles(deps: ProfileDeps): Profiles {
       // Counted only for a transaction the gate would really sign, so that
       // posting rubbish cannot spend the creations everyone shares.
       if (read.action === "create") {
-        if (!quotas.take(creatorBudgets(caller), now())) return rateRefusal();
+        const own = quotas.reserve(creatorBudgets(caller), now());
+        if (!own) return rateRefusal();
         const cap: Budget = {
           scope: "global",
           key: "profile-creations|day",
           limit: upstream.dailyCreateCap,
           windowMs: DAY_MS,
         };
-        if (!quotas.take([cap], now())) return failed("rate_limited", "daily_create_cap_reached");
+        // A creation refused for the day's cap must not spend the caller's own hourly budgets.
+        if (!quotas.take([cap], now())) {
+          quotas.refund(own);
+          return failed("rate_limited", "daily_create_cap_reached");
+        }
       }
       if (read.action === "write" && !quotas.take(writerBudgets(caller), now())) {
         return rateRefusal();
