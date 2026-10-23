@@ -389,7 +389,11 @@ export function createProfiles(deps: ProfileDeps): Profiles {
           limit: upstream.dailyCreateCap,
           windowMs: DAY_MS,
         };
-        if (!quotas.take([cap], now())) return failed("rate_limited", "daily_create_cap_reached");
+        // A creation refused for the day's cap must not spend the caller's own hourly budgets.
+        if (!quotas.take([cap], now())) {
+          quotas.refund(creatorBudgets(caller), now());
+          return failed("rate_limited", "daily_create_cap_reached");
+        }
       }
       if (read.action === "write" && !quotas.take(writerBudgets(caller), now())) {
         return rateRefusal();

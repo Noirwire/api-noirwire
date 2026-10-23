@@ -21,6 +21,12 @@ export interface QuotaStore {
    * cannot be counted. A request that is refused is not counted.
    */
   take(budgets: readonly Budget[], now?: number): boolean;
+  /**
+   * Gives back one to each budget a successful `take` counted, for work that
+   * was then refused before it cost anything. A window that has finished in
+   * the meantime has nothing to give back.
+   */
+  refund(budgets: readonly Budget[], now?: number): void;
 }
 
 /**
@@ -86,6 +92,13 @@ export function createMemoryQuotaStore(maxTrackedKeys = MAX_TRACKED_KEYS): Quota
         else windows.set(budget.key, { startedAt: now, windowMs: budget.windowMs, count: 1 });
       }
       return true;
+    },
+
+    refund(budgets, now = Date.now()) {
+      for (const budget of budgets) {
+        const current = tables[budget.scope].windows.get(budget.key);
+        if (live(current, now) && current.count > 0) current.count -= 1;
+      }
     },
   };
 }

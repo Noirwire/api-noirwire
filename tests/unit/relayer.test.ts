@@ -820,6 +820,47 @@ describe("the relayer route", () => {
     ).toBe(200);
   });
 
+  it("leaves the shared budget unspent when the relayer refuses to price or to sign", async () => {
+    const refuse = () =>
+      json({ jsonrpc: "2.0", error: { code: -32000, message: "no funds" }, id: 1 });
+    koraAnswer = refuse;
+    for (let i = 0; i < 70; i += 1) {
+      const answer = await call(
+        "signTransaction",
+        signParams(signedByPortfolio(genuine.sendUsdc())),
+      );
+      expect(answer.status).toBe(422);
+    }
+    koraAnswer = (method) =>
+      method === "signTransaction" ? refuse() : json({ result: koraEstimate(11_000) });
+    for (let i = 0; i < 70; i += 1) {
+      const answer = await call(
+        "signTransaction",
+        signParams(signedByPortfolio(genuine.sendUsdc())),
+      );
+      expect(answer.status).toBe(422);
+    }
+    expect(reasons()).not.toContain("429 signature_budget_spent");
+    koraAnswer = (method, params) =>
+      method === "estimateTransactionFee"
+        ? json({ result: koraEstimate(11_000) })
+        : json({
+            result: {
+              signed_transaction: coSigned(params.transaction as string, relayer),
+              signer_pubkey: relayer.publicKey.toBase58(),
+            },
+          });
+    let signed = 0;
+    for (let i = 0; i < 61; i += 1) {
+      const answer = await call(
+        "signTransaction",
+        signParams(signedByPortfolio(genuine.sendUsdc())),
+      );
+      if (answer.status === 200) signed += 1;
+    }
+    expect(signed).toBe(60);
+  });
+
   it("rations signatures by the hour as well as by the minute", async () => {
     let signed = 0;
     for (let minute = 0; minute < 11; minute += 1) {

@@ -1,5 +1,6 @@
 import { PublicKey } from "@solana/web3.js";
 import type { ChainAccount, ChainReader } from "../../chain/core/chainReader.js";
+import type { Log } from "../../common/core/log.js";
 
 /**
  * The price of SOL in dollars, as the relayer route uses it to state the
@@ -77,12 +78,15 @@ export type SolPrice = (now?: number) => Promise<number | null>;
  * relayer is not used. An unusable read is kept for the same thirty seconds
  * as a good one, so an outage does not turn every request into an RPC call.
  */
-export function createSolPrice(chain: ChainReader): SolPrice {
+export function createSolPrice(chain: ChainReader, log?: Log): SolPrice {
   let last: { at: number; usd: number | null } | null = null;
   return async (now = Date.now()) => {
     if (!last || now - last.at >= TTL_MS) {
       const account = await chain.getAccountInfo(PYTH_SOL_USD, "confirmed").catch(() => null);
       last = { at: now, usd: decodePythPrice(account, Math.floor(now / 1000)) };
+      if (last.usd === null) {
+        log?.({ event: "refusal", route: "relayer", status: 503, reason: "sol_price_unreadable" });
+      }
     }
     return last.usd === null ? null : Math.max(last.usd, MIN_SOL_PRICE_USD);
   };

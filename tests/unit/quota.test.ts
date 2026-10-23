@@ -99,6 +99,19 @@ describe("the quota store", () => {
     expect(quotas.take(of("late"), MINUTE_MS + 1_500)).toBe(true);
   });
 
+  it("gives a counted one back, only while its window is live and never below none", () => {
+    const quotas = createMemoryQuotaStore();
+    const one: Budget[] = [{ scope: "global", key: "k", limit: 1, windowMs: MINUTE_MS }];
+    expect(quotas.take(one, 0)).toBe(true);
+    expect(quotas.take(one, 1)).toBe(false);
+    quotas.refund(one, 2);
+    quotas.refund(one, 3);
+    expect(quotas.take(one, 4)).toBe(true);
+    expect(quotas.take(one, 5)).toBe(false);
+    quotas.refund(one, MINUTE_MS * 2);
+    expect(quotas.take(one, MINUTE_MS * 2)).toBe(true);
+  });
+
   it("keeps a flood of sessions from pushing out addresses, and the other way round", () => {
     const quotas = createMemoryQuotaStore(10);
     for (let i = 0; i < 20; i += 1) {

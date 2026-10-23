@@ -130,6 +130,7 @@ describe("the session guard", () => {
         expect(budgets[0]).toMatchObject({ scope: "ip", key: "verify|198.51.100.7" });
         return false;
       },
+      refund() {},
     };
     expect(await refusalOf(guardWith({ quotas }), request("Bearer a.b.c"))).toMatchObject({
       status: 429,

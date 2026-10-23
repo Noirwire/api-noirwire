@@ -68,7 +68,8 @@ export function relayedCostLamports(rentLamports: bigint | null): bigint {
  * The price is taken in whole cents so the sum stays in integers.
  */
 export function lamportsInUsdc(lamports: bigint, solPriceUsd: number): bigint {
-  const cents = BigInt(Math.ceil(solPriceUsd * 100));
+  const hundredthsOfCent = BigInt(solPriceUsd.toFixed(8).replace(".", ""));
+  const cents = (hundredthsOfCent + 999_999n) / 1_000_000n;
   // A lamport is a billionth of a SOL and a raw unit a millionth of a dollar.
   return (lamports * cents + 99_999n) / 100_000n;
 }
@@ -376,7 +377,11 @@ export function readRelayed(transaction: VersionedTransaction, pins: RelayerPins
     return refuse("fee_payer_not_pinned");
   }
   const portfolio = keys[1];
-  if (message.header.numRequiredSignatures !== REQUIRED_SIGNATURES || !portfolio) {
+  if (
+    message.header.numRequiredSignatures !== REQUIRED_SIGNATURES ||
+    transaction.signatures.length !== REQUIRED_SIGNATURES ||
+    !portfolio
+  ) {
     return refuse("signers");
   }
 

@@ -56,7 +56,7 @@ const CHAIN_READ_TIMEOUT_MS = 8_000;
           upstream: config.relayer,
           usdcMint: usdcMint(config.network),
           relay,
-          solPrice: createSolPrice(chain),
+          solPrice: createSolPrice(chain, log),
           accountRent: createAccountRent(chain),
           quotas,
           log,
