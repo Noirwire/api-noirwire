@@ -5,10 +5,11 @@ import { usdcMint } from "../chain/core/network.js";
 import type { Log } from "../common/core/log.js";
 import type { QuotaStore } from "../common/core/quota.js";
 import type { Relay } from "../common/core/relay.js";
+import type { SpendStore } from "../common/core/spend.js";
 import type { Config } from "../config/core/config.js";
 import { SERVER_KEY } from "../common/core/providerGate.js";
 import type { RpcGates } from "../core.module.js";
-import { CHAIN, CONFIG, LOG, QUOTAS, RELAY, RELAYER, RPC_GATES } from "../tokens.js";
+import { CHAIN, CONFIG, LOG, QUOTAS, RELAY, RELAYER, RPC_GATES, SPEND } from "../tokens.js";
 import { createAccountRent } from "./core/accountRent.js";
 import { createRelayer } from "./core/relayer.js";
 import { createSolPrice } from "./core/solPrice.js";
@@ -44,12 +45,13 @@ const CHAIN_READ_TIMEOUT_MS = 8_000;
     },
     {
       provide: RELAYER,
-      inject: [CONFIG, CHAIN, RELAY, QUOTAS, LOG],
+      inject: [CONFIG, CHAIN, RELAY, QUOTAS, SPEND, LOG],
       useFactory: (
         config: Config,
         chain: ChainReader,
         relay: Relay,
         quotas: QuotaStore,
+        spend: SpendStore,
         log: Log,
       ) =>
         createRelayer({
@@ -59,6 +61,7 @@ const CHAIN_READ_TIMEOUT_MS = 8_000;
           solPrice: createSolPrice(chain, log),
           accountRent: createAccountRent(chain),
           quotas,
+          spend,
           log,
         }),
     },
