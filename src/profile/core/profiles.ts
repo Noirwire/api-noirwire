@@ -10,6 +10,7 @@ import {
   type Answer,
   type ErrorCode,
 } from "../../common/core/answer.js";
+import { wideKeyOf } from "../../common/core/clientIp.js";
 import type { Log } from "../../common/core/log.js";
 import { PROFILE_HARD_MAX_DATA_LEN } from "../../config/core/config.js";
 import {
@@ -95,6 +96,17 @@ export const WRITES_PER_HOUR_PER_IP = 120;
 export const WRITES_PER_HOUR_TOTAL = 3_000;
 export const DAY_MS = 24 * HOUR_MS;
 
+/**
+ * An address budget for the caller's address, and for the /48 around it when
+ * that is a wider key (an IPv6 address), so a whole /48 buys no more than
+ * one address does.
+ */
+const perAddress = (caller: Caller, name: string, limit: number, windowMs: number): Budget[] => {
+  const wide = wideKeyOf(caller.ip);
+  const budget = (key: string): Budget => ({ scope: "ip", key: `${name}|${key}`, limit, windowMs });
+  return [budget(caller.ip), ...(wide === caller.ip ? [] : [budget(wide)])];
+};
+
 const creatorBudgets = (caller: Caller): Budget[] => [
   {
     scope: "session",
@@ -102,18 +114,8 @@ const creatorBudgets = (caller: Caller): Budget[] => [
     limit: CREATIONS_PER_HOUR_PER_SESSION,
     windowMs: HOUR_MS,
   },
-  {
-    scope: "ip",
-    key: `profile-create|${caller.ip}`,
-    limit: CREATIONS_PER_HOUR_PER_IP,
-    windowMs: HOUR_MS,
-  },
-  {
-    scope: "ip",
-    key: `profile-create-day|${caller.ip}`,
-    limit: CREATIONS_PER_DAY_PER_IP,
-    windowMs: DAY_MS,
-  },
+  ...perAddress(caller, "profile-create", CREATIONS_PER_HOUR_PER_IP, HOUR_MS),
+  ...perAddress(caller, "profile-create-day", CREATIONS_PER_DAY_PER_IP, DAY_MS),
 ];
 
 const writerBudgets = (caller: Caller): Budget[] => [
@@ -123,12 +125,7 @@ const writerBudgets = (caller: Caller): Budget[] => [
     limit: WRITES_PER_HOUR_PER_SESSION,
     windowMs: HOUR_MS,
   },
-  {
-    scope: "ip",
-    key: `profile-write|${caller.ip}`,
-    limit: WRITES_PER_HOUR_PER_IP,
-    windowMs: HOUR_MS,
-  },
+  ...perAddress(caller, "profile-write", WRITES_PER_HOUR_PER_IP, HOUR_MS),
   {
     scope: "global",
     key: "profile-write|hour",

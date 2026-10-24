@@ -2,8 +2,14 @@ import { Keypair, Transaction } from "@solana/web3.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { base58 } from "../../src/chain/core/bytes.js";
 import { signerOf } from "../../src/chain/core/signatures.js";
+import { rateKeyOf } from "../../src/common/core/clientIp.js";
 import type { LogLine } from "../../src/common/core/log.js";
-import { createMemoryQuotaStore, HOUR_MS, type Caller } from "../../src/common/core/quota.js";
+import {
+  createMemoryQuotaStore,
+  HOUR_MS,
+  type Caller,
+  type QuotaStore,
+} from "../../src/common/core/quota.js";
 import { spendInMemory } from "../../src/common/core/spend.js";
 import {
   CONFIRM_TIMEOUT_MS,
@@ -61,7 +67,9 @@ const rollup: Rollup = {
   },
 };
 
-function profiles(options: { off?: boolean; dailyCreateCap?: number } = {}): Profiles {
+function profiles(
+  options: { off?: boolean; dailyCreateCap?: number; quotas?: QuotaStore } = {},
+): Profiles {
   const signAsGate = signerOf(gate.secretKey);
   return createProfiles({
     upstream: options.off
@@ -75,7 +83,7 @@ function profiles(options: { off?: boolean; dailyCreateCap?: number } = {}): Pro
             return signAsGate(message);
           },
         },
-    quotas: createMemoryQuotaStore(),
+    quotas: options.quotas ?? createMemoryQuotaStore(),
     spend: spendInMemory(createMemoryQuotaStore()),
     log: (line) => void logged.push(line),
     now: () => clock,
@@ -289,6 +297,22 @@ describe("the creation budgets", () => {
     expect((await submit(api, creation(), fromIp())).status).toBe(200);
   });
 
+  it("counts the /48 around two /64s, so together they get no more daily creations than one address", async () => {
+    const api = profiles();
+    const sites = ["2001:db8:1:1::1", "2001:db8:1:2::1"].map((address) => rateKeyOf(address));
+    let session = 0;
+    const from = (n: number) => ({ sessionId: `wide-${(session += 1)}`, ip: sites[n % 2] });
+    for (let hour = 0; hour < CREATIONS_PER_DAY_PER_IP / CREATIONS_PER_HOUR_PER_IP; hour += 1) {
+      for (let i = 0; i < CREATIONS_PER_HOUR_PER_IP; i += 1) {
+        expect((await submit(api, creation(), from(i))).status).toBe(200);
+      }
+      clock += HOUR_MS;
+    }
+    expect(await outcome(submit(api, creation(), from(0)))).toEqual([429, "rate_limited"]);
+    expect(await outcome(submit(api, creation(), from(1)))).toEqual([429, "rate_limited"]);
+    expect(signed).toBe(CREATIONS_PER_DAY_PER_IP);
+  });
+
   it("does not spend an address's daily creations on one the daily cap refused", async () => {
     const api = profiles({ dailyCreateCap: 1 });
     expect((await submit(api, creation(), stranger())).status).toBe(200);
@@ -392,12 +416,20 @@ describe("the creation budgets", () => {
   });
 
   it("stops signing writes once the hour's total is reached, whoever asks", async () => {
-    const api = profiles();
-    for (let i = 0; i < WRITES_PER_HOUR_TOTAL; i += 1) {
-      expect((await submit(api, genuine.write())).status).toBe(200);
+    const quotas = createMemoryQuotaStore();
+    const totalWrites = {
+      scope: "global",
+      key: "profile-write|hour",
+      limit: WRITES_PER_HOUR_TOTAL,
+      windowMs: HOUR_MS,
+    } as const;
+    for (let i = 0; i < WRITES_PER_HOUR_TOTAL - 1; i += 1) {
+      expect(quotas.take([totalWrites], clock)).toBe(true);
     }
+    const api = profiles({ quotas });
+    expect((await submit(api, genuine.write())).status).toBe(200);
     expect(await outcome(submit(api, genuine.write()))).toEqual([429, "rate_limited"]);
-    expect(signed).toBe(WRITES_PER_HOUR_TOTAL);
+    expect(signed).toBe(1);
     expect((await submit(api, genuine.close())).status).toBe(200);
   });
 
