@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { codeOf, parsed, refusal, type Answer, type ErrorCode } from "../../common/core/answer.js";
+import { parsed, refusal, relayFailure, type Answer } from "../../common/core/answer.js";
 import type { Log } from "../../common/core/log.js";
 import type { Relay } from "../../common/core/relay.js";
 
@@ -19,15 +19,6 @@ export const PROFILE_ROUTE = "profile";
 const ROLLUP_TIMEOUT_MS = 8_000;
 /** The largest answer is one profile account: at most 4,096 bytes of record, base64, in its envelope. */
 const MAX_RESPONSE_BYTES = 32 * 1024;
-
-/** The relay's own failures, which are passed on as they are. */
-const RELAY_FAILURES: readonly ErrorCode[] = [
-  "rate_limited",
-  "upstream_failed",
-  "upstream_refused",
-  "upstream_not_reached",
-  "upstream_timeout",
-];
 
 /** What the rollup said, or the error the caller is answered with when it said nothing usable. */
 export type Asked = { json: unknown } | { failed: Answer };
@@ -69,9 +60,9 @@ export function createRollup(deps: { url: string; relay: Relay; log: Log }): Rol
       timeoutMs: ROLLUP_TIMEOUT_MS,
     });
     if (replied.status === 200) return { json: parsed(replied) };
-    const failure = RELAY_FAILURES.find((code) => code === codeOf(replied));
+    const failed = relayFailure(replied);
     // The rollup's own error bodies are not passed on: they are not this API's to vouch for.
-    return failure ? { failed: refusal(failure) } : unusable("rollup_error_status");
+    return failed ? { failed } : unusable("rollup_error_status");
   }
 
   return {

@@ -100,6 +100,20 @@ export function codeOf(from: Answer): string | null {
   return from.status >= 400 && typeof code === "string" ? code : null;
 }
 
+const RELAY_FAILURES: readonly ErrorCode[] = [
+  "rate_limited",
+  "upstream_failed",
+  "upstream_refused",
+  "upstream_not_reached",
+  "upstream_timeout",
+];
+
+/** The relay's own failure that `from` is, ready to pass on as it is, or null for any other answer. */
+export function relayFailure(from: Answer): Answer | null {
+  const failure = RELAY_FAILURES.find((code) => code === codeOf(from));
+  return failure ? refusal(failure) : null;
+}
+
 export const rateRefusal = (): Answer => refusal("rate_limited");
 
 /** The same refusal, saying when to try again: this server is holding back for a provider. */
