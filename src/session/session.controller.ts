@@ -2,6 +2,7 @@ import { Controller, Inject, Post, Req, Res } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiTags } from "@nestjs/swagger";
 import type { Request, Response } from "express";
 import { Public } from "../auth/public.decorator.js";
+import { wideKeyOf } from "../common/core/clientIp.js";
 import { HOUR_MS, MINUTE_MS, type Budget } from "../common/core/quota.js";
 import { Admission } from "../common/http/admission.js";
 import { ApiErrors, EXAMPLE, ok } from "../common/http/api-docs.js";
@@ -22,10 +23,21 @@ export const SESSION_REFRESH_LIMITS = { perIpPerMinute: 60, totalPerMinute: 1_20
 const START_MAX_BODY_BYTES = 1024;
 const REFRESH_MAX_BODY_BYTES = 2 * 1024;
 
-const startBudgets = (ip: string, limits: Config["sessionStarts"]): Budget[] => [
-  { scope: "ip", key: `session-start|${ip}`, limit: limits.perIpPerHour, windowMs: HOUR_MS },
-  { scope: "global", key: "session-start", limit: limits.perHour, windowMs: HOUR_MS },
-];
+/** An IPv6 address is counted at its /64 and at its /48 as well, so holding a whole /48 buys no more sessions than one address. */
+const startBudgets = (ip: string, limits: Config["sessionStarts"]): Budget[] => {
+  const wide = wideKeyOf(ip);
+  const perAddress = (key: string): Budget => ({
+    scope: "ip",
+    key: `session-start|${key}`,
+    limit: limits.perIpPerHour,
+    windowMs: HOUR_MS,
+  });
+  return [
+    perAddress(ip),
+    ...(wide === ip ? [] : [perAddress(wide)]),
+    { scope: "global", key: "session-start", limit: limits.perHour, windowMs: HOUR_MS },
+  ];
+};
 
 const refreshBudgets = (ip: string): Budget[] => [
   {
