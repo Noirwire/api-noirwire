@@ -16,12 +16,15 @@ import { send } from "../common/http/send.js";
 import type { Config } from "../config/core/config.js";
 import { CONFIG, PROFILES } from "../tokens.js";
 import {
+  CREATIONS_PER_DAY_PER_IP,
   CREATIONS_PER_HOUR_PER_IP,
   CREATIONS_PER_HOUR_PER_SESSION,
   MAX_TRANSACTION_CHARS,
   PROFILE_LIMITS,
   PROFILE_MAX_BODY_BYTES,
+  WRITES_PER_HOUR_PER_IP,
   WRITES_PER_HOUR_PER_SESSION,
+  WRITES_PER_HOUR_TOTAL,
   type Profiles,
 } from "./core/profiles.js";
 import { PROFILE_ROUTE } from "./core/rollup.js";
@@ -398,7 +401,7 @@ export class ProfileController {
       "- The bytes sent in are exactly that transaction, written the one way a transaction is written, with nothing after it, and no longer than a creation with a record of `maxDataLen` bytes. That may be well over Solana's 1,232 bytes: the rollup takes larger transactions, and a wallet writes such a one out by hand because the usual libraries refuse to.",
       "- What is sent on is those same bytes. The gate's signature is written into its place over the very message the owner signed; nothing is written out again.",
       "",
-      `**Creations are rationed hardest**, because each one spends rent: ${CREATIONS_PER_HOUR_PER_SESSION} an hour per session, ${CREATIONS_PER_HOUR_PER_IP} an hour per address, and a ceiling on how many are signed in 24 hours in total, whoever asks. When the ceiling is reached a creation is answered \`429\` and everything else goes on. Writes are held to ${WRITES_PER_HOUR_PER_SESSION} an hour per session. A transaction that was refused is not counted.`,
+      `**Creations are rationed hardest**, because each one spends rent: ${CREATIONS_PER_HOUR_PER_SESSION} an hour per session, ${CREATIONS_PER_HOUR_PER_IP} an hour and ${CREATIONS_PER_DAY_PER_IP} a day per address, and a ceiling on how many are signed in 24 hours in total, whoever asks. When the ceiling is reached a creation is answered \`429\` and everything else goes on. Writes are held to ${WRITES_PER_HOUR_PER_SESSION} an hour per session, ${WRITES_PER_HOUR_PER_IP} an hour per address and ${WRITES_PER_HOUR_TOTAL.toLocaleString("en-US")} an hour in total. A transaction that was refused is not counted.`,
       "",
       "**Sending the same transaction twice is safe.** Two byte-identical transactions are one transaction: the rollup runs it once, and the second request is answered with the outcome of the first.",
       "",

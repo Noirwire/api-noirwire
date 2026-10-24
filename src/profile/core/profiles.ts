@@ -74,8 +74,14 @@ export const PROFILE_LIMITS: RouteLimits = { perSession: 60, perIp: 600, total: 
  * most creations the gate signs in one window of 24 hours, whoever asks.
  * When that is spent creation stops and everything else goes on.
  *
+ * An address is held to a day's creations as well as an hour's, because
+ * the hourly limit alone, repeated through a day, would let a few addresses
+ * spend the whole of `dailyCreateCap`.
+ *
  * A write that grows a record spends a little rent too, and a healthy wallet
- * writes a handful of times a day, so writes are rationed per session.
+ * writes a handful of times a day, so writes are rationed per session, per
+ * address and in total. A session costs nothing to replace, so the address
+ * and the total are what hold when sessions are made freely.
  *
  * None of this is a hard limit. Each counter lives in the memory of one
  * process, a restart forgets it, and a session costs nothing to replace.
@@ -83,7 +89,10 @@ export const PROFILE_LIMITS: RouteLimits = { perSession: 60, perIp: 600, total: 
  */
 export const CREATIONS_PER_HOUR_PER_SESSION = 3;
 export const CREATIONS_PER_HOUR_PER_IP = 10;
+export const CREATIONS_PER_DAY_PER_IP = 20;
 export const WRITES_PER_HOUR_PER_SESSION = 30;
+export const WRITES_PER_HOUR_PER_IP = 120;
+export const WRITES_PER_HOUR_TOTAL = 3_000;
 export const DAY_MS = 24 * HOUR_MS;
 
 const creatorBudgets = (caller: Caller): Budget[] => [
@@ -99,6 +108,12 @@ const creatorBudgets = (caller: Caller): Budget[] => [
     limit: CREATIONS_PER_HOUR_PER_IP,
     windowMs: HOUR_MS,
   },
+  {
+    scope: "ip",
+    key: `profile-create-day|${caller.ip}`,
+    limit: CREATIONS_PER_DAY_PER_IP,
+    windowMs: DAY_MS,
+  },
 ];
 
 const writerBudgets = (caller: Caller): Budget[] => [
@@ -106,6 +121,18 @@ const writerBudgets = (caller: Caller): Budget[] => [
     scope: "session",
     key: `profile-write|${caller.sessionId}`,
     limit: WRITES_PER_HOUR_PER_SESSION,
+    windowMs: HOUR_MS,
+  },
+  {
+    scope: "ip",
+    key: `profile-write|${caller.ip}`,
+    limit: WRITES_PER_HOUR_PER_IP,
+    windowMs: HOUR_MS,
+  },
+  {
+    scope: "global",
+    key: "profile-write|hour",
+    limit: WRITES_PER_HOUR_TOTAL,
     windowMs: HOUR_MS,
   },
 ];
@@ -393,7 +420,7 @@ export function createProfiles(deps: ProfileDeps): Profiles {
           limit: upstream.dailyCreateCap,
           windowMs: DAY_MS,
         };
-        // A creation refused for the day's cap must not spend the caller's own hourly budgets.
+        // A creation refused for the day's cap must not spend the caller's own budgets.
         if (!(await spend.reserve([cap], now()))) {
           quotas.refund(own);
           return failed("rate_limited", "daily_create_cap_reached");
