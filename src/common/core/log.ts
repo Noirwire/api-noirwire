@@ -11,6 +11,9 @@ export type LogLine =
   /** Something an operator has to fix: a provider turned down this server's own credentials. */
   | { event: "operator_error"; route: string; status: number; reason: string }
   | { event: "error"; route: string; name: string }
-  | { event: "lifecycle"; state: "listening" | "stopping" | "config_refused" | "crashed" };
+  | {
+      event: "lifecycle";
+      state: "listening" | "stopping" | "config_refused" | "crashed" | "jupiter_referral_unset";
+    };
 
 export type Log = (line: LogLine) => void;

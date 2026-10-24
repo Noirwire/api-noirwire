@@ -12,6 +12,7 @@ const base = {
   SUPABASE_URL: "https://project.supabase.co",
   SUPABASE_PUBLISHABLE_KEY: "sb_publishable_example",
 };
+const referral = { JUPITER_REFERRAL_ACCOUNT: address(), JUPITER_REFERRAL_FEE_BPS: "100" };
 const kora = {
   KORA_URLS: "http://kora.railway.internal:8080",
   KORA_API_KEY: "the-api-key",
@@ -36,7 +37,7 @@ describe("the configuration", () => {
       port: 4000,
       network: "devnet",
       rpcUrl: "https://api.devnet.solana.com",
-      jupiter: { url: "https://api.jup.ag", apiKey: null },
+      jupiter: { url: "https://api.jup.ag", apiKey: null, referral: null },
       privatePaymentsUrl: "https://payments.magicblock.app",
       priceHistoryUrl: "https://datapi.jup.ag",
       relayer: null,
@@ -64,6 +65,7 @@ describe("the configuration", () => {
     const { SOLANA_NETWORK: _unset, ...withoutNetwork } = base;
     const railway = {
       ...withoutNetwork,
+      ...referral,
       RAILWAY_ENVIRONMENT_NAME: "production",
       PORT: "8080",
       SOLANA_RPC_URL: "https://rpc.example.com/?api-key=k",
@@ -71,7 +73,7 @@ describe("the configuration", () => {
 
     it("needs only the secrets and addresses: every tuning value has a default", () => {
       expect(loadConfig(railway)).toEqual({
-        ...loadConfig(base),
+        ...loadConfig({ ...base, ...referral }),
         port: 8080,
         network: "mainnet",
         rpcUrl: "https://rpc.example.com/?api-key=k",
@@ -126,6 +128,7 @@ describe("the configuration", () => {
     );
     const config = loadConfig({
       ...base,
+      ...referral,
       SOLANA_NETWORK: "mainnet",
       SOLANA_RPC_URL: "https://rpc.example.com/?api-key=k",
     });
@@ -414,6 +417,88 @@ describe("the configuration", () => {
       expect(problems({ ...base, ...profile, PROFILE_DAILY_CREATE_CAP: "0" })).toMatch(
         /PROFILE_DAILY_CREATE_CAP/,
       );
+    });
+  });
+
+  describe("the Jupiter referral", () => {
+    const account = address();
+
+    it("is read from both variables, and is off when neither is set", () => {
+      expect(
+        loadConfig({
+          ...base,
+          JUPITER_REFERRAL_ACCOUNT: account,
+          JUPITER_REFERRAL_FEE_BPS: "100",
+        }).jupiter.referral,
+      ).toEqual({ account, feeBps: 100 });
+      expect(loadConfig(base).jupiter.referral).toBeNull();
+    });
+
+    it("is required on mainnet, and optional elsewhere", () => {
+      const mainnet = {
+        ...base,
+        SOLANA_NETWORK: "mainnet",
+        SOLANA_RPC_URL: "https://rpc.example.com",
+      };
+      expect(problems(mainnet)).toMatch(
+        /JUPITER_REFERRAL_ACCOUNT and JUPITER_REFERRAL_FEE_BPS are required on mainnet/,
+      );
+      expect(
+        problems({
+          ...mainnet,
+          JUPITER_REFERRAL_ACCOUNT: account,
+          JUPITER_REFERRAL_FEE_BPS: "100",
+        }),
+      ).toBe("");
+    });
+
+    describe("beside the rewards referral account", () => {
+      const rewardsEnv = {
+        REWARDS_DATABASE_SECRET_KEY: "the-database-secret-key",
+        REWARDS_FINGERPRINT_SECRET: "a-fingerprint-secret-of-32-chars!",
+        REWARDS_SEASON_START: "2026-10-19T00:00:00Z",
+      };
+      const jupiter = { JUPITER_REFERRAL_ACCOUNT: account, JUPITER_REFERRAL_FEE_BPS: "100" };
+
+      it("passes when both name the same address", () => {
+        expect(
+          problems({ ...base, ...rewardsEnv, ...jupiter, REWARDS_REFERRAL_ACCOUNT: account }),
+        ).toBe("");
+      });
+
+      it("is refused when they differ, naming both variables and neither value", () => {
+        const other = address();
+        const message = problems({
+          ...base,
+          ...rewardsEnv,
+          ...jupiter,
+          REWARDS_REFERRAL_ACCOUNT: other,
+        });
+        expect(message).toMatch(/JUPITER_REFERRAL_ACCOUNT and REWARDS_REFERRAL_ACCOUNT/);
+        expect(message).not.toContain(account);
+        expect(message).not.toContain(other);
+      });
+
+      it("is not compared when rewards are off", () => {
+        expect(problems({ ...base, ...jupiter })).toBe("");
+        expect(problems({ ...base, ...rewardsEnv, REWARDS_REFERRAL_ACCOUNT: address() })).toBe("");
+      });
+    });
+
+    it("refuses half of it, an account that is not an address and a fee outside what Jupiter takes", () => {
+      expect(problems({ ...base, JUPITER_REFERRAL_ACCOUNT: account })).toMatch(
+        /JUPITER_REFERRAL_ACCOUNT and JUPITER_REFERRAL_FEE_BPS together/,
+      );
+      expect(problems({ ...base, JUPITER_REFERRAL_FEE_BPS: "100" })).toMatch(/together/);
+      expect(
+        problems({ ...base, JUPITER_REFERRAL_ACCOUNT: "nope", JUPITER_REFERRAL_FEE_BPS: "100" }),
+      ).toMatch(/JUPITER_REFERRAL_ACCOUNT must be a Solana address/);
+      for (const fee of ["0", "49", "256", "1.5", "abc"]) {
+        expect(
+          problems({ ...base, JUPITER_REFERRAL_ACCOUNT: account, JUPITER_REFERRAL_FEE_BPS: fee }),
+          fee,
+        ).toMatch(/JUPITER_REFERRAL_FEE_BPS/);
+      }
     });
   });
 

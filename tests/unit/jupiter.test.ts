@@ -16,10 +16,17 @@ const order = {
   slippageBps: "50",
 };
 
-function plan(method: "GET" | "POST", path: string, body: unknown) {
+const REFERRAL = { account: "7jRUMBYoVKZdHbtbDU3M3mFqg5CzvAwKGVw8GmVo8dKR", feeBps: 100 };
+
+function plan(
+  method: "GET" | "POST",
+  path: string,
+  body: unknown,
+  referral: { account: string; feeBps: number } | null = null,
+) {
   const route = jupiterRoute(method, path);
   if (!route) return "not found";
-  const planned = planJupiter(route, method, path, JSON.stringify(body));
+  const planned = planJupiter(route, method, path, JSON.stringify(body), referral);
   return "refused" in planned ? planned.refused.status : planned.upstream;
 }
 
@@ -64,6 +71,52 @@ describe("the Jupiter allow-list", () => {
   it("refuses an order carrying a field it does not know, so nobody can name a payer or a receiver", () => {
     for (const field of ["payer", "receiver", "excludeRouters"]) {
       expect(plan("POST", "swap/v2/order", { ...order, [field]: ADDRESS })).toBe(400);
+    }
+  });
+
+  it("ignores a referral account or fee in an order, so no caller keeps, waives or changes the platform fee", () => {
+    const callers = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
+    const sent = { ...order, referralAccount: callers, referralFee: "0" };
+    expect(plan("POST", "swap/v2/order", sent, REFERRAL)).toEqual(
+      plan("POST", "swap/v2/order", order, REFERRAL),
+    );
+    expect(plan("POST", "swap/v2/order", sent, null)).toEqual(
+      plan("POST", "swap/v2/order", order, null),
+    );
+    const upstream = plan("POST", "swap/v2/order", sent, REFERRAL) as { pathAndQuery: string };
+    expect(upstream.pathAndQuery).not.toContain(callers);
+    expect(upstream.pathAndQuery).toContain(`referralAccount=${REFERRAL.account}`);
+    expect(upstream.pathAndQuery).toContain("referralFee=100");
+  });
+
+  it("adds the server's referral account and fee to every order, and to nothing else", () => {
+    expect(plan("POST", "swap/v2/order", order, REFERRAL)).toEqual({
+      method: "GET",
+      pathAndQuery: `swap/v2/order?${new URLSearchParams(order).toString()}&referralAccount=${REFERRAL.account}&referralFee=100`,
+    });
+    expect(
+      plan("POST", "lend/v1/earn/earnings", { user: ADDRESS, positions: "a" }, REFERRAL),
+    ).toEqual({
+      method: "GET",
+      pathAndQuery: `lend/v1/earn/earnings?user=${ADDRESS}&positions=a`,
+    });
+  });
+
+  it("adds a fee to an order with no other field only as the server's own", () => {
+    expect(plan("POST", "swap/v2/order", {}, REFERRAL)).toEqual({
+      method: "GET",
+      pathAndQuery: `swap/v2/order?referralAccount=${REFERRAL.account}&referralFee=100`,
+    });
+  });
+
+  it("lets an order leave out the routers the wallet cannot check, and no other router choice", () => {
+    const leftOut = { ...order, excludeRouters: "dflow,okx" };
+    expect(plan("POST", "swap/v2/order", leftOut)).toEqual({
+      method: "GET",
+      pathAndQuery: `swap/v2/order?${new URLSearchParams(leftOut).toString()}`,
+    });
+    for (const routers of ["jupiterz", "dflow", "okx,dflow", "metis,jupiterz,dflow,okx", ""]) {
+      expect(plan("POST", "swap/v2/order", { ...order, excludeRouters: routers })).toBe(400);
     }
   });
 

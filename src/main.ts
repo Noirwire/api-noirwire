@@ -28,6 +28,7 @@ for (const event of ["unhandledRejection", "uncaughtException"] as const) {
 }
 
 const config = configOrExit();
+if (!config.jupiter.referral) log({ event: "lifecycle", state: "jupiter_referral_unset" });
 const app = await createApp(config, log);
 await app.listen(config.port, "0.0.0.0");
 log({ event: "lifecycle", state: "listening" });
