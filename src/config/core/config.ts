@@ -65,12 +65,18 @@ export type RewardsConfig = {
   doubleHourStartMs: number | null;
 };
 
+/** The fee every swap order carries and the Jupiter referral account it is paid into. Set here, never by a caller. */
+export type JupiterReferral = { account: string; feeBps: number };
+
+/** What Jupiter accepts as a referral fee, in basis points. */
+const JUPITER_REFERRAL_FEE_BPS = { min: 50, max: 255 };
+
 export type Config = {
   port: number;
   network: Network;
   /** The RPC provider, key included. */
   rpcUrl: string;
-  jupiter: { url: string; apiKey: string | null };
+  jupiter: { url: string; apiKey: string | null; referral: JupiterReferral | null };
   privatePaymentsUrl: string;
   priceHistoryUrl: string;
   relayer: RelayerConfig | null;
@@ -265,6 +271,7 @@ export function loadConfig(env: Env): Config {
     jupiter: {
       url: url("JUPITER_API_URL", "https://api.jup.ag"),
       apiKey: read("JUPITER_API_KEY") || null,
+      referral: jupiterReferral(env, problems),
     },
     privatePaymentsUrl: url("MAGICBLOCK_API_URL", "https://payments.magicblock.app"),
     priceHistoryUrl: url("PRICE_HISTORY_API_URL", "https://datapi.jup.ag"),
@@ -352,6 +359,33 @@ function profileConfig(
     maxDataLen,
     dailyCreateCap,
   };
+}
+
+/**
+ * The referral every swap order is sent with, or null when none is set: with
+ * `JUPITER_REFERRAL_ACCOUNT` and `JUPITER_REFERRAL_FEE_BPS` both unset the
+ * orders carry no platform fee. Half of it is refused, so a deploy cannot
+ * take a fee into no account or name an account with no fee.
+ */
+function jupiterReferral(env: Env, problems: string[]): JupiterReferral | null {
+  const read = (name: string) => env[name]?.trim() ?? "";
+  const account = read("JUPITER_REFERRAL_ACCOUNT");
+  const feeBps = read("JUPITER_REFERRAL_FEE_BPS");
+  if (!account && !feeBps) return null;
+  if (!account || !feeBps) {
+    problems.push(
+      "Set JUPITER_REFERRAL_ACCOUNT and JUPITER_REFERRAL_FEE_BPS together, or neither.",
+    );
+    return null;
+  }
+  const before = problems.length;
+  if (!isAddress(account)) problems.push("JUPITER_REFERRAL_ACCOUNT must be a Solana address.");
+  const { min, max } = JUPITER_REFERRAL_FEE_BPS;
+  const bps = z.coerce.number().int().min(min).max(max).safeParse(feeBps);
+  if (!bps.success) {
+    problems.push(`JUPITER_REFERRAL_FEE_BPS must be a whole number from ${min} to ${max}.`);
+  }
+  return problems.length > before || !bps.success ? null : { account, feeBps: bps.data };
 }
 
 /** A date, or a date and time in UTC, as ISO 8601 writes one. */

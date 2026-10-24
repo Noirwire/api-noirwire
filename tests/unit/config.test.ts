@@ -36,7 +36,7 @@ describe("the configuration", () => {
       port: 4000,
       network: "devnet",
       rpcUrl: "https://api.devnet.solana.com",
-      jupiter: { url: "https://api.jup.ag", apiKey: null },
+      jupiter: { url: "https://api.jup.ag", apiKey: null, referral: null },
       privatePaymentsUrl: "https://payments.magicblock.app",
       priceHistoryUrl: "https://datapi.jup.ag",
       relayer: null,
@@ -414,6 +414,37 @@ describe("the configuration", () => {
       expect(problems({ ...base, ...profile, PROFILE_DAILY_CREATE_CAP: "0" })).toMatch(
         /PROFILE_DAILY_CREATE_CAP/,
       );
+    });
+  });
+
+  describe("the Jupiter referral", () => {
+    const account = address();
+
+    it("is read from both variables, and is off when neither is set", () => {
+      expect(
+        loadConfig({
+          ...base,
+          JUPITER_REFERRAL_ACCOUNT: account,
+          JUPITER_REFERRAL_FEE_BPS: "100",
+        }).jupiter.referral,
+      ).toEqual({ account, feeBps: 100 });
+      expect(loadConfig(base).jupiter.referral).toBeNull();
+    });
+
+    it("refuses half of it, an account that is not an address and a fee outside what Jupiter takes", () => {
+      expect(problems({ ...base, JUPITER_REFERRAL_ACCOUNT: account })).toMatch(
+        /JUPITER_REFERRAL_ACCOUNT and JUPITER_REFERRAL_FEE_BPS together/,
+      );
+      expect(problems({ ...base, JUPITER_REFERRAL_FEE_BPS: "100" })).toMatch(/together/);
+      expect(
+        problems({ ...base, JUPITER_REFERRAL_ACCOUNT: "nope", JUPITER_REFERRAL_FEE_BPS: "100" }),
+      ).toMatch(/JUPITER_REFERRAL_ACCOUNT must be a Solana address/);
+      for (const fee of ["0", "49", "256", "1.5", "abc"]) {
+        expect(
+          problems({ ...base, JUPITER_REFERRAL_ACCOUNT: account, JUPITER_REFERRAL_FEE_BPS: fee }),
+          fee,
+        ).toMatch(/JUPITER_REFERRAL_FEE_BPS/);
+      }
     });
   });
 

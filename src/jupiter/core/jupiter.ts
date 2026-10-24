@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { refusal, type Answer } from "../../common/core/answer.js";
 import { limitsFromProviderRps, type RouteLimits } from "../../common/core/quota.js";
+import type { JupiterReferral } from "../../config/core/config.js";
 
 /**
  * The wallet's only way to Jupiter: quotes and orders, landing a signed
@@ -18,6 +19,8 @@ import { limitsFromProviderRps, type RouteLimits } from "../../common/core/quota
 type Route = {
   /** Sent upstream as a GET, with exactly these fields of the JSON body as its query. */
   asQuery?: readonly string[];
+  /** The platform fee is added to the query by this server; a body that names it is refused. */
+  withReferral?: boolean;
 };
 
 /** The one read that names nobody and is the same for everyone: the lending vaults and their rates. */
@@ -25,15 +28,8 @@ export const VAULTS_PATH = "lend/v1/earn/tokens";
 
 export const JUPITER_ROUTES: Readonly<Record<string, Route>> = {
   "POST swap/v2/order": {
-    asQuery: [
-      "inputMint",
-      "outputMint",
-      "amount",
-      "taker",
-      "slippageBps",
-      "referralAccount",
-      "referralFee",
-    ],
+    asQuery: ["inputMint", "outputMint", "amount", "taker", "slippageBps"],
+    withReferral: true,
   },
   "POST swap/v2/execute": {},
   [`GET ${VAULTS_PATH}`]: {},
@@ -99,12 +95,26 @@ export type JupiterPlan =
   | { refused: Answer };
 
 /** What is sent to Jupiter for an admitted request on a listed route. */
-export function planJupiter(route: Route, method: string, path: string, body: string): JupiterPlan {
+export function planJupiter(
+  route: Route,
+  method: string,
+  path: string,
+  body: string,
+  referral: JupiterReferral | null,
+): JupiterPlan {
   const invalid = { refused: refusal("invalid_request") };
   if (route.asQuery) {
     const query = queryFrom(body, route.asQuery);
     if (query === null) return invalid;
-    return { upstream: { method: "GET", pathAndQuery: `${path}?${query}` } };
+    const fee =
+      route.withReferral && referral
+        ? new URLSearchParams({
+            referralAccount: referral.account,
+            referralFee: String(referral.feeBps),
+          }).toString()
+        : "";
+    const full = [query, fee].filter(Boolean).join("&");
+    return { upstream: { method: "GET", pathAndQuery: `${path}?${full}` } };
   }
   if (method === "GET") return { upstream: { method: "GET", pathAndQuery: path } };
   return { upstream: { method: "POST", pathAndQuery: path, body } };

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clientIp, rateKeyOf, UNKNOWN_CLIENT } from "../../src/common/core/clientIp.js";
+import { clientIp, rateKeyOf, UNKNOWN_CLIENT, wideKeyOf } from "../../src/common/core/clientIp.js";
 
 const SECRET = "an-edge-secret-of-at-least-32-characters";
 const SOCKET = "10.0.0.9";
@@ -103,6 +103,15 @@ describe("the key an address is counted under", () => {
     expect(rateKeyOf("2001:db8:1234:5679::1")).not.toBe(first);
     expect(rateKeyOf("::1")).toBe("0:0:0:0::/64");
     expect(rateKeyOf("fe80::1%eth0")).toBe("fe80:0:0:0::/64");
+  });
+
+  it("names the /48 a /64 lies in, and leaves any other key as it is", () => {
+    const wide = wideKeyOf(rateKeyOf("2001:db8:1234:5678:aaaa:bbbb:cccc:dddd"));
+    expect(wide).toBe("2001:db8:1234::/48");
+    expect(wideKeyOf(rateKeyOf("2001:db8:1234:ffff::1"))).toBe(wide);
+    expect(wideKeyOf(rateKeyOf("2001:db8:1235:5678::1"))).not.toBe(wide);
+    expect(wideKeyOf("192.0.2.10")).toBe("192.0.2.10");
+    expect(wideKeyOf(UNKNOWN_CLIENT)).toBe(UNKNOWN_CLIENT);
   });
 
   it("is the shared unknown key for anything that is not an address", () => {

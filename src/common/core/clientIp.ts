@@ -72,6 +72,7 @@ function ipv6Groups(address: string): string[] | null {
  * address is its /64: a single subscriber holds a whole /64, so counting
  * each of its addresses apart would give one person as many budgets as they
  * cared to use. Anything that is not an address is the shared unknown key.
+ * A site may hold a whole /48, which is 65536 of those /64s: see `wideKeyOf`.
  */
 export function rateKeyOf(address: string | undefined): string {
   const value = address?.trim() ?? "";
@@ -88,4 +89,12 @@ export function rateKeyOf(address: string | undefined): string {
     .slice(0, 4)
     .map((group) => group.toLowerCase().replace(/^0+(?=.)/, ""))
     .join(":")}::/64`;
+}
+
+const IPV6_RATE_KEY = /^([0-9a-f]{1,4}:[0-9a-f]{1,4}:[0-9a-f]{1,4}):[0-9a-f]{1,4}::\/64$/;
+
+/** The /48 that a /64 rate key lies in. Any other key (an IPv4 address, the unknown key) is its own wider key. */
+export function wideKeyOf(rateKey: string): string {
+  const match = IPV6_RATE_KEY.exec(rateKey);
+  return match ? `${match[1]}::/48` : rateKey;
 }

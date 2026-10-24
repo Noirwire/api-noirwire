@@ -148,6 +148,16 @@ describe("POST /v1/session", () => {
     expect(api.providers.sentTo("supabase")).toHaveLength(11);
   });
 
+  it("counts IPv6 per /48 as well as per /64, so a site holding a /48 gets one address's allowance", async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 12; i += 1) {
+      statuses.push((await start({ ip: `2001:db8:1:${i.toString(16)}::1` })).status);
+    }
+    expect(statuses.slice(0, 10).every((status) => status === 200)).toBe(true);
+    expect(statuses.slice(10)).toEqual([429, 429]);
+    expect((await start({ ip: "2001:db8:2::1" })).status).toBe(200);
+  });
+
   it("rations sessions in total, whoever asks, at the limits the operator sets", async () => {
     const tight = await startApi({
       SESSION_STARTS_PER_HOUR: "5",

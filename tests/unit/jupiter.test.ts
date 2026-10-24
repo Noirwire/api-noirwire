@@ -16,10 +16,17 @@ const order = {
   slippageBps: "50",
 };
 
-function plan(method: "GET" | "POST", path: string, body: unknown) {
+const REFERRAL = { account: "7jRUMBYoVKZdHbtbDU3M3mFqg5CzvAwKGVw8GmVo8dKR", feeBps: 100 };
+
+function plan(
+  method: "GET" | "POST",
+  path: string,
+  body: unknown,
+  referral: { account: string; feeBps: number } | null = null,
+) {
   const route = jupiterRoute(method, path);
   if (!route) return "not found";
-  const planned = planJupiter(route, method, path, JSON.stringify(body));
+  const planned = planJupiter(route, method, path, JSON.stringify(body), referral);
   return "refused" in planned ? planned.refused.status : planned.upstream;
 }
 
@@ -65,6 +72,34 @@ describe("the Jupiter allow-list", () => {
     for (const field of ["payer", "receiver", "excludeRouters"]) {
       expect(plan("POST", "swap/v2/order", { ...order, [field]: ADDRESS })).toBe(400);
     }
+  });
+
+  it("refuses an order that names its own referral account or fee, so no caller keeps or waives the platform fee", () => {
+    for (const field of ["referralAccount", "referralFee"]) {
+      for (const referral of [null, REFERRAL]) {
+        expect(plan("POST", "swap/v2/order", { ...order, [field]: "0" }, referral)).toBe(400);
+      }
+    }
+  });
+
+  it("adds the server's referral account and fee to every order, and to nothing else", () => {
+    expect(plan("POST", "swap/v2/order", order, REFERRAL)).toEqual({
+      method: "GET",
+      pathAndQuery: `swap/v2/order?${new URLSearchParams(order).toString()}&referralAccount=${REFERRAL.account}&referralFee=100`,
+    });
+    expect(
+      plan("POST", "lend/v1/earn/earnings", { user: ADDRESS, positions: "a" }, REFERRAL),
+    ).toEqual({
+      method: "GET",
+      pathAndQuery: `lend/v1/earn/earnings?user=${ADDRESS}&positions=a`,
+    });
+  });
+
+  it("adds a fee to an order with no other field only as the server's own", () => {
+    expect(plan("POST", "swap/v2/order", {}, REFERRAL)).toEqual({
+      method: "GET",
+      pathAndQuery: `swap/v2/order?referralAccount=${REFERRAL.account}&referralFee=100`,
+    });
   });
 
   it("refuses a body that is not a flat object of strings", () => {
