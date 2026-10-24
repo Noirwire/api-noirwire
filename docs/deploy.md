@@ -57,7 +57,7 @@ Rewards are off until the first four of these are set in the same Raw Editor (th
 REWARDS_DATABASE_SECRET_KEY=<the secret key of the Supabase project at SUPABASE_URL>
 REWARDS_FINGERPRINT_SECRET=<openssl rand -hex 32>
 REWARDS_SEASON_START=<week 0's first day: a Monday, 00:00 UTC, such as 2026-10-19>
-REWARDS_REFERRAL_ACCOUNT=<NoirWire's Jupiter referral account>
+REWARDS_REFERRAL_ACCOUNT=<NoirWire's Jupiter referral account: must equal JUPITER_REFERRAL_ACCOUNT when that is set>
 REWARDS_DAILY_JOIN_CAP=<the most new members on one UTC day; 2000 when unset>
 REWARDS_DOUBLE_HOUR_START=<optional: when the double hour begins, with its offset, such as 2026-11-07T18:00:00Z>
 ```

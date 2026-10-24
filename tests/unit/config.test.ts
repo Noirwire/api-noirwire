@@ -452,6 +452,39 @@ describe("the configuration", () => {
       ).toBe("");
     });
 
+    describe("beside the rewards referral account", () => {
+      const rewardsEnv = {
+        REWARDS_DATABASE_SECRET_KEY: "the-database-secret-key",
+        REWARDS_FINGERPRINT_SECRET: "a-fingerprint-secret-of-32-chars!",
+        REWARDS_SEASON_START: "2026-10-19T00:00:00Z",
+      };
+      const jupiter = { JUPITER_REFERRAL_ACCOUNT: account, JUPITER_REFERRAL_FEE_BPS: "100" };
+
+      it("passes when both name the same address", () => {
+        expect(
+          problems({ ...base, ...rewardsEnv, ...jupiter, REWARDS_REFERRAL_ACCOUNT: account }),
+        ).toBe("");
+      });
+
+      it("is refused when they differ, naming both variables and neither value", () => {
+        const other = address();
+        const message = problems({
+          ...base,
+          ...rewardsEnv,
+          ...jupiter,
+          REWARDS_REFERRAL_ACCOUNT: other,
+        });
+        expect(message).toMatch(/JUPITER_REFERRAL_ACCOUNT and REWARDS_REFERRAL_ACCOUNT/);
+        expect(message).not.toContain(account);
+        expect(message).not.toContain(other);
+      });
+
+      it("is not compared when rewards are off", () => {
+        expect(problems({ ...base, ...jupiter })).toBe("");
+        expect(problems({ ...base, ...rewardsEnv, REWARDS_REFERRAL_ACCOUNT: address() })).toBe("");
+      });
+    });
+
     it("refuses half of it, an account that is not an address and a fee outside what Jupiter takes", () => {
       expect(problems({ ...base, JUPITER_REFERRAL_ACCOUNT: account })).toMatch(
         /JUPITER_REFERRAL_ACCOUNT and JUPITER_REFERRAL_FEE_BPS together/,

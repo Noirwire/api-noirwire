@@ -1,4 +1,4 @@
-import { Keypair } from "@solana/web3.js";
+import { Keypair, PublicKey } from "@solana/web3.js";
 import { z } from "zod";
 import { DEVNET_RPC_URL, isAddress, type Network } from "../../chain/core/network.js";
 import { isWeekStart } from "../../rewards/core/weeks.js";
@@ -294,6 +294,18 @@ export function loadConfig(env: Env): Config {
     sessionStarts,
     analytics,
   };
+  // Swaps pay the Jupiter referral and claims look for the rewards one: two accounts would credit nothing.
+  if (
+    config.rewards &&
+    config.jupiter.referral &&
+    !new PublicKey(config.rewards.referralAccount).equals(
+      new PublicKey(config.jupiter.referral.account),
+    )
+  ) {
+    problems.push(
+      "JUPITER_REFERRAL_ACCOUNT and REWARDS_REFERRAL_ACCOUNT must be the same address.",
+    );
+  }
   if (problems.length > 0) throw new ConfigError(problems);
   return config;
 }
