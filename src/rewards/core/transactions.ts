@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { codeOf, parsed, refusal, type Answer, type ErrorCode } from "../../common/core/answer.js";
+import { parsed, refusal, relayFailure, type Answer } from "../../common/core/answer.js";
 import type { Log } from "../../common/core/log.js";
 import type { Relay } from "../../common/core/relay.js";
 import type { ChainTransaction } from "./claim.js";
@@ -16,14 +16,6 @@ import { REWARDS_ROUTE } from "./database.js";
 const RPC_TIMEOUT_MS = 8_000;
 /** A trade with its logs and parsed instructions is tens of kilobytes. */
 const MAX_RESPONSE_BYTES = 512 * 1024;
-
-const RELAY_FAILURES: readonly ErrorCode[] = [
-  "rate_limited",
-  "upstream_failed",
-  "upstream_refused",
-  "upstream_not_reached",
-  "upstream_timeout",
-];
 
 const tokenBalance = z.object({
   accountIndex: z.number().int().nonnegative(),
@@ -95,8 +87,8 @@ export function createTransactions(deps: { rpcUrl: string; relay: Relay; log: Lo
         timeoutMs: RPC_TIMEOUT_MS,
       });
       if (replied.status !== 200) {
-        const failure = RELAY_FAILURES.find((code) => code === codeOf(replied));
-        return failure ? { failed: refusal(failure) } : unusable("rpc_error_status");
+        const failed = relayFailure(replied);
+        return failed ? { failed } : unusable("rpc_error_status");
       }
       const reply = transactionReply.safeParse(parsed(replied));
       if (!reply.success) return unusable("rpc_answer_unusable");

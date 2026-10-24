@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { codeOf, parsed, refusal, type Answer, type ErrorCode } from "../../common/core/answer.js";
+import { parsed, refusal, relayFailure, type Answer } from "../../common/core/answer.js";
 import type { Log } from "../../common/core/log.js";
 import type { Relay } from "../../common/core/relay.js";
 import type { RewardsStorage, Stored } from "./storage.js";
@@ -21,15 +21,6 @@ export const REWARDS_ROUTE = "rewards";
 const DATABASE_TIMEOUT_MS = 8_000;
 /** The largest answer is one member's state: a few hundred bytes. */
 const MAX_RESPONSE_BYTES = 16 * 1024;
-
-/** The relay's own failures, which are passed on as they are. */
-const RELAY_FAILURES: readonly ErrorCode[] = [
-  "rate_limited",
-  "upstream_failed",
-  "upstream_refused",
-  "upstream_not_reached",
-  "upstream_timeout",
-];
 
 const amount = z
   .string()
@@ -110,9 +101,9 @@ export function createRewardsDatabase(deps: {
       timeoutMs: DATABASE_TIMEOUT_MS,
     });
     if (replied.status !== 200 && replied.status !== 204) {
-      const failure = RELAY_FAILURES.find((code) => code === codeOf(replied));
+      const failed = relayFailure(replied);
       // The database's own error bodies name tables and functions: they are not passed on.
-      return failure ? { failed: refusal(failure) } : unusable("database_error_status");
+      return failed ? { failed } : unusable("database_error_status");
     }
     const reply = schema.safeParse(parsed(replied));
     return reply.success ? { value: reply.data } : unusable("database_answer_unusable");
