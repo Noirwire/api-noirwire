@@ -74,12 +74,19 @@ describe("the Jupiter allow-list", () => {
     }
   });
 
-  it("refuses an order that names its own referral account or fee, so no caller keeps or waives the platform fee", () => {
-    for (const field of ["referralAccount", "referralFee"]) {
-      for (const referral of [null, REFERRAL]) {
-        expect(plan("POST", "swap/v2/order", { ...order, [field]: "0" }, referral)).toBe(400);
-      }
-    }
+  it("ignores a referral account or fee in an order, so no caller keeps, waives or changes the platform fee", () => {
+    const callers = "9xQeWvG816bUx9EPjHmaT23yvVM2ZWbrrpZb9PusVFin";
+    const sent = { ...order, referralAccount: callers, referralFee: "0" };
+    expect(plan("POST", "swap/v2/order", sent, REFERRAL)).toEqual(
+      plan("POST", "swap/v2/order", order, REFERRAL),
+    );
+    expect(plan("POST", "swap/v2/order", sent, null)).toEqual(
+      plan("POST", "swap/v2/order", order, null),
+    );
+    const upstream = plan("POST", "swap/v2/order", sent, REFERRAL) as { pathAndQuery: string };
+    expect(upstream.pathAndQuery).not.toContain(callers);
+    expect(upstream.pathAndQuery).toContain(`referralAccount=${REFERRAL.account}`);
+    expect(upstream.pathAndQuery).toContain("referralFee=100");
   });
 
   it("adds the server's referral account and fee to every order, and to nothing else", () => {

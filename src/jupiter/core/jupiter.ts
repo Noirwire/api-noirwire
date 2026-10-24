@@ -19,7 +19,7 @@ import type { JupiterReferral } from "../../config/core/config.js";
 type Route = {
   /** Sent upstream as a GET, with exactly these fields of the JSON body as its query. */
   asQuery?: readonly string[];
-  /** The platform fee is added to the query by this server; a body that names it is refused. */
+  /** The platform fee is added to the query by this server; whatever the body says of it is dropped. */
   withReferral?: boolean;
 };
 
@@ -85,6 +85,25 @@ export function queryFrom(body: string, allowed: readonly string[]): string | nu
   return query.toString();
 }
 
+/**
+ * The body without the referral fields. Deployed wallets still send them;
+ * what they say is ignored, and the order carries this server's own.
+ */
+function withoutReferral(body: string): string {
+  try {
+    const json: unknown = JSON.parse(body);
+    if (typeof json !== "object" || json === null || Array.isArray(json)) return body;
+    const {
+      referralAccount: _account,
+      referralFee: _fee,
+      ...rest
+    } = json as Record<string, unknown>;
+    return JSON.stringify(rest);
+  } catch {
+    return body;
+  }
+}
+
 export function jupiterRoute(method: string, path: string): Route | undefined {
   const key = `${method} ${path}`;
   return Object.hasOwn(JUPITER_ROUTES, key) ? JUPITER_ROUTES[key] : undefined;
@@ -104,7 +123,7 @@ export function planJupiter(
 ): JupiterPlan {
   const invalid = { refused: refusal("invalid_request") };
   if (route.asQuery) {
-    const query = queryFrom(body, route.asQuery);
+    const query = queryFrom(route.withReferral ? withoutReferral(body) : body, route.asQuery);
     if (query === null) return invalid;
     const fee =
       route.withReferral && referral

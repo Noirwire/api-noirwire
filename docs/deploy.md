@@ -47,7 +47,7 @@ JUPITER_REFERRAL_ACCOUNT=<NoirWire's Jupiter referral account>
 JUPITER_REFERRAL_FEE_BPS=<the fee in basis points, 50 to 255>
 ```
 
-With both unset, orders go out with no platform fee and the start logs `jupiter_referral_unset`; rewards then credit nothing, because no fee reaches the rewards referral account. With only one set, the start is refused. A swap request that names `referralAccount` or `referralFee` itself is answered `400`.
+Both are required on mainnet: without them the start is refused, so a missing setting cannot waive the platform fee. Off mainnet they are optional; with both unset, orders go out with no platform fee and the start logs `jupiter_referral_unset`, and rewards credit nothing because no fee reaches the rewards referral account. With only one set, the start is refused. A swap request that carries `referralAccount` or `referralFee` is accepted, but those values are ignored: the order always carries the server's own.
 
 ## Rewards (optional)
 

@@ -252,6 +252,13 @@ describe("the rewards routes", () => {
     expect(perAddress.slice(0, 20).every((status) => status === 200)).toBe(true);
     expect(perAddress.slice(20)).toEqual([429, 429]);
     expect(await joinAs(await api.token(), "198.51.100.3")).toBe(200);
+
+    const perSite: number[] = [];
+    for (let i = 0; i < 22; i += 1) {
+      perSite.push(await joinAs(await api.token(), `2001:db8:7:${i.toString(16)}::1`));
+    }
+    expect(perSite.slice(0, 20).every((status) => status === 200)).toBe(true);
+    expect(perSite.slice(20)).toEqual([429, 429]);
   });
 
   it("POST /v1/rewards/join makes a member, with the database key in both headers and nothing of the caller", async () => {

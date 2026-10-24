@@ -271,7 +271,7 @@ export function loadConfig(env: Env): Config {
     jupiter: {
       url: url("JUPITER_API_URL", "https://api.jup.ag"),
       apiKey: read("JUPITER_API_KEY") || null,
-      referral: jupiterReferral(env, problems),
+      referral: jupiterReferral(env, problems, networkName === "mainnet"),
     },
     privatePaymentsUrl: url("MAGICBLOCK_API_URL", "https://payments.magicblock.app"),
     priceHistoryUrl: url("PRICE_HISTORY_API_URL", "https://datapi.jup.ag"),
@@ -367,11 +367,18 @@ function profileConfig(
  * orders carry no platform fee. Half of it is refused, so a deploy cannot
  * take a fee into no account or name an account with no fee.
  */
-function jupiterReferral(env: Env, problems: string[]): JupiterReferral | null {
+function jupiterReferral(env: Env, problems: string[], mainnet: boolean): JupiterReferral | null {
   const read = (name: string) => env[name]?.trim() ?? "";
   const account = read("JUPITER_REFERRAL_ACCOUNT");
   const feeBps = read("JUPITER_REFERRAL_FEE_BPS");
-  if (!account && !feeBps) return null;
+  if (!account && !feeBps) {
+    if (mainnet) {
+      problems.push(
+        "JUPITER_REFERRAL_ACCOUNT and JUPITER_REFERRAL_FEE_BPS are required on mainnet: without them every swap would carry no platform fee.",
+      );
+    }
+    return null;
+  }
   if (!account || !feeBps) {
     problems.push(
       "Set JUPITER_REFERRAL_ACCOUNT and JUPITER_REFERRAL_FEE_BPS together, or neither.",

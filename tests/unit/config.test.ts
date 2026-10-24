@@ -12,6 +12,7 @@ const base = {
   SUPABASE_URL: "https://project.supabase.co",
   SUPABASE_PUBLISHABLE_KEY: "sb_publishable_example",
 };
+const referral = { JUPITER_REFERRAL_ACCOUNT: address(), JUPITER_REFERRAL_FEE_BPS: "100" };
 const kora = {
   KORA_URLS: "http://kora.railway.internal:8080",
   KORA_API_KEY: "the-api-key",
@@ -64,6 +65,7 @@ describe("the configuration", () => {
     const { SOLANA_NETWORK: _unset, ...withoutNetwork } = base;
     const railway = {
       ...withoutNetwork,
+      ...referral,
       RAILWAY_ENVIRONMENT_NAME: "production",
       PORT: "8080",
       SOLANA_RPC_URL: "https://rpc.example.com/?api-key=k",
@@ -71,7 +73,7 @@ describe("the configuration", () => {
 
     it("needs only the secrets and addresses: every tuning value has a default", () => {
       expect(loadConfig(railway)).toEqual({
-        ...loadConfig(base),
+        ...loadConfig({ ...base, ...referral }),
         port: 8080,
         network: "mainnet",
         rpcUrl: "https://rpc.example.com/?api-key=k",
@@ -126,6 +128,7 @@ describe("the configuration", () => {
     );
     const config = loadConfig({
       ...base,
+      ...referral,
       SOLANA_NETWORK: "mainnet",
       SOLANA_RPC_URL: "https://rpc.example.com/?api-key=k",
     });
@@ -429,6 +432,24 @@ describe("the configuration", () => {
         }).jupiter.referral,
       ).toEqual({ account, feeBps: 100 });
       expect(loadConfig(base).jupiter.referral).toBeNull();
+    });
+
+    it("is required on mainnet, and optional elsewhere", () => {
+      const mainnet = {
+        ...base,
+        SOLANA_NETWORK: "mainnet",
+        SOLANA_RPC_URL: "https://rpc.example.com",
+      };
+      expect(problems(mainnet)).toMatch(
+        /JUPITER_REFERRAL_ACCOUNT and JUPITER_REFERRAL_FEE_BPS are required on mainnet/,
+      );
+      expect(
+        problems({
+          ...mainnet,
+          JUPITER_REFERRAL_ACCOUNT: account,
+          JUPITER_REFERRAL_FEE_BPS: "100",
+        }),
+      ).toBe("");
     });
 
     it("refuses half of it, an account that is not an address and a fee outside what Jupiter takes", () => {
