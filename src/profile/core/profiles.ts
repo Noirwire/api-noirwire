@@ -19,6 +19,7 @@ import {
   type QuotaStore,
   type RouteLimits,
 } from "../../common/core/quota.js";
+import type { SpendStore } from "../../common/core/spend.js";
 import { profileAddress, programErrorOf } from "./program.js";
 import { PROFILE_ROUTE, type Asked, type Rollup, type RpcError } from "./rollup.js";
 import {
@@ -199,6 +200,8 @@ export type ProfileDeps = {
   /** Null when this deployment keeps no profiles. */
   upstream: ProfileUpstream | null;
   quotas: QuotaStore;
+  /** Where the day's creation cap is counted: it bounds what the gate spends, so it outlives a restart. */
+  spend: SpendStore;
   log: Log;
   now?: () => number;
   sleep?: (ms: number) => Promise<void>;
@@ -215,7 +218,7 @@ export type Profiles = {
 };
 
 export function createProfiles(deps: ProfileDeps): Profiles {
-  const { upstream, quotas, log } = deps;
+  const { upstream, quotas, spend, log } = deps;
   const now = deps.now ?? Date.now;
   const sleep =
     deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -391,7 +394,7 @@ export function createProfiles(deps: ProfileDeps): Profiles {
           windowMs: DAY_MS,
         };
         // A creation refused for the day's cap must not spend the caller's own hourly budgets.
-        if (!quotas.take([cap], now())) {
+        if (!(await spend.reserve([cap], now()))) {
           quotas.refund(own);
           return failed("rate_limited", "daily_create_cap_reached");
         }

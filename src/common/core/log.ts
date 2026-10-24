@@ -13,7 +13,15 @@ export type LogLine =
   | { event: "error"; route: string; name: string }
   | {
       event: "lifecycle";
-      state: "listening" | "stopping" | "config_refused" | "crashed" | "jupiter_referral_unset";
+      state:
+        | "listening"
+        | "stopping"
+        | "config_refused"
+        | "crashed"
+        | "jupiter_referral_unset"
+        /** Where the budgets that bound spend are counted: in the database, or in this process's memory. */
+        | "spend_in_database"
+        | "spend_in_memory";
     };
 
 export type Log = (line: LogLine) => void;

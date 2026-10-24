@@ -12,6 +12,7 @@ import { base58 as bs58 } from "../../src/chain/core/bytes.js";
 import type { ChainReader } from "../../src/chain/core/chainReader.js";
 import type { LogLine } from "../../src/common/core/log.js";
 import { createMemoryQuotaStore, type Caller } from "../../src/common/core/quota.js";
+import { spendInMemory } from "../../src/common/core/spend.js";
 import { createRelay } from "../../src/common/core/relay.js";
 import type { RelayerConfig } from "../../src/config/core/config.js";
 import { associatedAccountLen, createAccountRent } from "../../src/relayer/core/accountRent.js";
@@ -156,6 +157,7 @@ function make(upstreamConfig: RelayerConfig | null = config()): Relayer {
     solPrice: createSolPrice(chain),
     accountRent: createAccountRent(chain),
     quotas: createMemoryQuotaStore(),
+    spend: spendInMemory(createMemoryQuotaStore()),
     log,
     now: () => clock,
   });

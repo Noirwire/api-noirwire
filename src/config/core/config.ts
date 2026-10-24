@@ -82,6 +82,12 @@ export type Config = {
   relayer: RelayerConfig | null;
   profile: ProfileConfig | null;
   rewards: RewardsConfig | null;
+  /**
+   * The secret key of the Supabase project at `SUPABASE_URL`, which the
+   * spend caps are counted with, or null when they are counted in memory.
+   * Never logged, returned or put in an error.
+   */
+  spendDatabaseSecretKey: string | null;
   auth: {
     supabaseUrl: string;
     issuer: string;
@@ -242,6 +248,13 @@ export function loadConfig(env: Env): Config {
     problems.push("SESSION_MAX_AGE_HOURS must be a number of hours, above 0 and at most 720.");
   }
 
+  const spendDatabaseSecretKey = read("REWARDS_DATABASE_SECRET_KEY") || null;
+  if (networkName === "mainnet" && spendDatabaseSecretKey === null) {
+    problems.push(
+      "REWARDS_DATABASE_SECRET_KEY is required on mainnet: without it the spend caps are counted in memory, and a restart refills them.",
+    );
+  }
+
   const umamiUrl = read("UMAMI_URL");
   const umamiWebsite = read("UMAMI_WEBSITE_ID");
   const umamiHostname = read("UMAMI_HOSTNAME");
@@ -278,6 +291,7 @@ export function loadConfig(env: Env): Config {
     relayer: relayerConfig(env, problems),
     profile: profileConfig(env, problems, count),
     rewards: rewardsConfig(env, problems, count),
+    spendDatabaseSecretKey,
     auth: {
       supabaseUrl,
       issuer: `${supabaseUrl}/auth/v1`,

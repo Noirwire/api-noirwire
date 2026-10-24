@@ -43,6 +43,7 @@ describe("the configuration", () => {
       relayer: null,
       profile: null,
       rewards: null,
+      spendDatabaseSecretKey: null,
       auth: {
         supabaseUrl: "https://project.supabase.co",
         issuer: "https://project.supabase.co/auth/v1",
@@ -69,6 +70,7 @@ describe("the configuration", () => {
       RAILWAY_ENVIRONMENT_NAME: "production",
       PORT: "8080",
       SOLANA_RPC_URL: "https://rpc.example.com/?api-key=k",
+      REWARDS_DATABASE_SECRET_KEY: "sb_secret_example",
     };
 
     it("needs only the secrets and addresses: every tuning value has a default", () => {
@@ -77,8 +79,20 @@ describe("the configuration", () => {
         port: 8080,
         network: "mainnet",
         rpcUrl: "https://rpc.example.com/?api-key=k",
+        spendDatabaseSecretKey: "sb_secret_example",
         trustedProxyHops: 1,
       });
+    });
+
+    it("refuses to start without the database key the spend caps are counted with", () => {
+      const message = problems({ ...railway, REWARDS_DATABASE_SECRET_KEY: undefined });
+      expect(message).toMatch(/REWARDS_DATABASE_SECRET_KEY is required on mainnet/);
+      expect(message).not.toMatch(/REWARDS_FINGERPRINT_SECRET/);
+    });
+
+    it("counts the spend caps in the database whether or not rewards are on", () => {
+      expect(loadConfig(railway).rewards).toBeNull();
+      expect(loadConfig(railway).spendDatabaseSecretKey).toBe("sb_secret_example");
     });
 
     it("still refuses mainnet without a dedicated RPC provider", () => {
@@ -131,6 +145,7 @@ describe("the configuration", () => {
       ...referral,
       SOLANA_NETWORK: "mainnet",
       SOLANA_RPC_URL: "https://rpc.example.com/?api-key=k",
+      REWARDS_DATABASE_SECRET_KEY: "sb_secret_example",
     });
     expect(config.rpcUrl).toBe("https://rpc.example.com/?api-key=k");
   });
@@ -439,6 +454,7 @@ describe("the configuration", () => {
         ...base,
         SOLANA_NETWORK: "mainnet",
         SOLANA_RPC_URL: "https://rpc.example.com",
+        REWARDS_DATABASE_SECRET_KEY: "sb_secret_example",
       };
       expect(problems(mainnet)).toMatch(
         /JUPITER_REFERRAL_ACCOUNT and JUPITER_REFERRAL_FEE_BPS are required on mainnet/,

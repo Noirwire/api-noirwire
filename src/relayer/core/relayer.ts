@@ -19,6 +19,7 @@ import {
   type QuotaStore,
   type RouteLimits,
 } from "../../common/core/quota.js";
+import type { SpendStore } from "../../common/core/spend.js";
 import { wasNeverConnected, type Relay } from "../../common/core/relay.js";
 import { base58, bytesEqual } from "../../chain/core/bytes.js";
 import { signedBy } from "../../chain/core/signatures.js";
@@ -239,6 +240,8 @@ export type RelayerDeps = {
   solPrice: SolPrice;
   accountRent: AccountRent;
   quotas: QuotaStore;
+  /** Where the signature budgets everyone shares are counted: they bound what the relayer spends, so they outlive a restart. */
+  spend: SpendStore;
   log: Log;
   random?: () => number;
   now?: () => number;
@@ -251,7 +254,7 @@ export type Relayer = {
 };
 
 export function createRelayer(deps: RelayerDeps): Relayer {
-  const { upstream, usdcMint, relay, quotas, log } = deps;
+  const { upstream, usdcMint, relay, quotas, spend, log } = deps;
   const random = deps.random ?? Math.random;
   const now = deps.now ?? Date.now;
 
@@ -486,7 +489,7 @@ export function createRelayer(deps: RelayerDeps): Relayer {
       // Counted only once the relayer itself would sign, so that posting
       // rubbish cannot spend the budget everyone shares. A refusal at the
       // estimate step happens before this, so a flood of them stays free.
-      const receipt = quotas.reserve(SIGNATURE_BUDGET, now());
+      const receipt = await spend.reserve(SIGNATURE_BUDGET, now());
       if (!receipt) {
         log({ event: "refusal", route: ROUTE, status: 429, reason: "signature_budget_spent" });
         return rateRefusal();
@@ -494,7 +497,7 @@ export function createRelayer(deps: RelayerDeps): Relayer {
       // Once the sign request is on its way a signature may exist, so anything
       // short of the replica proving otherwise (a thrown error, a lost or
       // malformed answer, an odd status) leaves the slot spent.
-      return forward(method, sent, replica.url, upstream, () => quotas.refund(receipt));
+      return forward(method, sent, replica.url, upstream, () => void spend.refund(receipt));
     },
   };
 

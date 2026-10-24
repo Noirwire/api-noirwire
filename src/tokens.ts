@@ -2,6 +2,7 @@
 export const CONFIG = Symbol("CONFIG");
 export const LOG = Symbol("LOG");
 export const QUOTAS = Symbol("QUOTAS");
+export const SPEND = Symbol("SPEND");
 export const RELAY = Symbol("RELAY");
 export const CHAIN = Symbol("CHAIN");
 export const VERIFIER = Symbol("VERIFIER");

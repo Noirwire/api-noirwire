@@ -1,11 +1,12 @@
 import { Global, Module, type DynamicModule } from "@nestjs/common";
 import type { Log } from "./common/core/log.js";
-import { createMemoryQuotaStore } from "./common/core/quota.js";
-import { createRelay } from "./common/core/relay.js";
+import { createMemoryQuotaStore, type QuotaStore } from "./common/core/quota.js";
+import { createRelay, type Relay } from "./common/core/relay.js";
+import { chooseSpendStore, type SpendStore } from "./common/core/spend.js";
 import { Admission } from "./common/http/admission.js";
 import { createProviderGate, type ProviderGate } from "./common/core/providerGate.js";
 import { heavyRps } from "./rpc/core/rpc.js";
-import { CONFIG, JUPITER_GATE, LOG, QUOTAS, RELAY, RPC_GATES } from "./tokens.js";
+import { CONFIG, JUPITER_GATE, LOG, QUOTAS, RELAY, RPC_GATES, SPEND } from "./tokens.js";
 
 /** The RPC provider's allowance, and inside it the smaller one of the costly calls. */
 export type RpcGates = { all: ProviderGate; heavy: ProviderGate };
@@ -27,6 +28,19 @@ export class CoreModule {
         { provide: QUOTAS, useFactory: () => createMemoryQuotaStore() },
         { provide: RELAY, useFactory: () => createRelay({ fetch, log }) },
         {
+          provide: SPEND,
+          inject: [QUOTAS, RELAY],
+          useFactory: (quotas: QuotaStore, relay: Relay): SpendStore =>
+            chooseSpendStore({
+              database: config.spendDatabaseSecretKey
+                ? { url: config.auth.supabaseUrl, secretKey: config.spendDatabaseSecretKey }
+                : null,
+              quotas,
+              relay,
+              log,
+            }),
+        },
+        {
           provide: RPC_GATES,
           useFactory: (): RpcGates => ({
             all: createProviderGate({ ratePerSecond: config.rpcProviderRps }),
@@ -39,7 +53,7 @@ export class CoreModule {
         },
         Admission,
       ],
-      exports: [CONFIG, LOG, QUOTAS, RELAY, RPC_GATES, JUPITER_GATE, Admission],
+      exports: [CONFIG, LOG, QUOTAS, SPEND, RELAY, RPC_GATES, JUPITER_GATE, Admission],
     };
   }
 }
