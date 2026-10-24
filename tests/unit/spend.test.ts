@@ -17,27 +17,34 @@ const DAY_MS = 24 * HOUR_MS;
 const minute: Budget = { scope: "global", key: "minute", limit: 2, windowMs: MINUTE_MS };
 const hour: Budget = { scope: "global", key: "hour", limit: 3, windowMs: HOUR_MS };
 
-/** The two SQL functions, as the migration defines them, over a map. */
+/** The two SQL functions, as the migration defines them, over a map and a clock the test moves. */
 function fakeDatabase() {
-  const counts = new Map<string, number>();
-  const id = (budget: string, windowStartMs: number) => `${budget}@${windowStartMs}`;
-  const state = { down: false, failTakeFor: "" };
+  const rows = new Map<string, { start: number; count: number }>();
+  const state = { down: false, failTakeFor: "", now: 0 };
   const calls: SpendCalls = {
-    take(budget, windowStartMs, limit) {
+    take(budget, windowMs, limit) {
       if (state.down || state.failTakeFor === budget) return Promise.resolve(null);
-      const held = counts.get(id(budget, windowStartMs)) ?? 0;
-      if (limit < 1 || held >= limit) return Promise.resolve(false);
-      counts.set(id(budget, windowStartMs), held + 1);
-      return Promise.resolve(true);
+      const row = rows.get(budget);
+      if (limit < 1 || windowMs < 1) return Promise.resolve(false);
+      if (!row || row.start + windowMs <= state.now) {
+        rows.set(budget, { start: state.now, count: 1 });
+      } else if (row.count < limit) {
+        row.count += 1;
+      } else {
+        return Promise.resolve(false);
+      }
+      return Promise.resolve(new Date(rows.get(budget)!.start).toISOString());
     },
-    refund(budget, windowStartMs) {
+    refund(budget, windowStart) {
       if (state.down) return Promise.resolve(false);
-      const held = counts.get(id(budget, windowStartMs)) ?? 0;
-      if (held > 0) counts.set(id(budget, windowStartMs), held - 1);
+      const row = rows.get(budget);
+      if (row && new Date(row.start).toISOString() === windowStart && row.count > 0) {
+        row.count -= 1;
+      }
       return Promise.resolve(true);
     },
   };
-  return { calls, counts, state, held: (budget: string, at: number) => counts.get(id(budget, at)) };
+  return { calls, state, held: (budget: string) => rows.get(budget)?.count };
 }
 
 function store() {
@@ -53,64 +60,77 @@ function store() {
 describe("the durable quota store", () => {
   it("refuses at the cap and counts a window once it is taken", async () => {
     const { spend, held } = store();
-    expect(await spend.reserve([minute], 0)).not.toBeNull();
-    expect(await spend.reserve([minute], 0)).not.toBeNull();
-    expect(await spend.reserve([minute], 0)).toBeNull();
-    expect(held("minute", 0)).toBe(2);
+    expect(await spend.reserve([minute])).not.toBeNull();
+    expect(await spend.reserve([minute])).not.toBeNull();
+    expect(await spend.reserve([minute])).toBeNull();
+    expect(held("minute")).toBe(2);
   });
 
-  it("opens a new window when the old one has run out, aligned to the clock", async () => {
-    const { spend } = store();
+  it("starts a window at the first use and ends it a whole window later", async () => {
+    const { spend, state } = store();
     const one: Budget = { ...minute, limit: 1 };
-    expect(await spend.reserve([one], 10_000)).not.toBeNull();
-    expect(await spend.reserve([one], MINUTE_MS - 1)).toBeNull();
-    expect(await spend.reserve([one], MINUTE_MS)).not.toBeNull();
+    state.now = 10_000;
+    expect(await spend.reserve([one])).not.toBeNull();
+    state.now = 10_000 + MINUTE_MS - 1;
+    expect(await spend.reserve([one])).toBeNull();
+    state.now = 10_000 + MINUTE_MS;
+    expect(await spend.reserve([one])).not.toBeNull();
+  });
+
+  it("does not refill a spent cap at a clock boundary inside the window", async () => {
+    const { spend, state } = store();
+    state.now = MINUTE_MS - 5_000;
+    expect(await spend.reserve([minute])).not.toBeNull();
+    expect(await spend.reserve([minute])).not.toBeNull();
+    state.now = MINUTE_MS + 5_000;
+    expect(await spend.reserve([minute])).toBeNull();
   });
 
   it("takes from every budget or from none", async () => {
     const { spend, held } = store();
-    await spend.reserve([minute, hour], 0);
-    await spend.reserve([minute, hour], 0);
-    expect(await spend.reserve([minute, hour], 0)).toBeNull();
-    expect(held("minute", 0)).toBe(2);
-    expect(held("hour", 0)).toBe(2);
+    await spend.reserve([minute, hour]);
+    await spend.reserve([minute, hour]);
+    expect(await spend.reserve([minute, hour])).toBeNull();
+    expect(held("minute")).toBe(2);
+    expect(held("hour")).toBe(2);
   });
 
-  it("gives back only the exact windows a receipt counted", async () => {
-    const { spend, held } = store();
+  it("gives back only the window a receipt counted", async () => {
+    const { spend, state, held } = store();
     const day: Budget = { scope: "global", key: "day", limit: 5, windowMs: DAY_MS };
-    const early = await spend.reserve([minute, day], 0);
-    await spend.reserve([minute, day], MINUTE_MS);
+    const early = await spend.reserve([minute, day]);
+    state.now = MINUTE_MS;
+    await spend.reserve([minute, day]);
     expect(early).not.toBeNull();
     await spend.refund(early!);
-    expect(held("minute", 0)).toBe(0);
-    expect(held("minute", MINUTE_MS)).toBe(1);
-    expect(held("day", 0)).toBe(1);
+    expect(held("minute")).toBe(1);
+    expect(held("day")).toBe(1);
   });
 
   it("makes a second refund of one receipt a no-op", async () => {
     const { spend, held } = store();
-    const first = await spend.reserve([minute], 0);
-    await spend.reserve([minute], 0);
+    const first = await spend.reserve([minute]);
+    await spend.reserve([minute]);
     await spend.refund(first!);
     await spend.refund(first!);
-    expect(held("minute", 0)).toBe(1);
+    expect(held("minute")).toBe(1);
   });
 
   it("never refunds below zero", async () => {
     const { calls, held, spend } = store();
-    const receipt = await spend.reserve([minute], 0);
-    await calls.refund("minute", 0);
+    const receipt = await spend.reserve([minute]);
+    await calls.refund("minute", new Date(0).toISOString());
+    await calls.refund("minute", new Date(0).toISOString());
     await spend.refund(receipt!);
-    expect(held("minute", 0)).toBe(0);
+    expect(held("minute")).toBe(0);
   });
 
   it("fails closed when the database does not answer, and logs without a name or value", async () => {
     const { spend, state, logged } = store();
     state.down = true;
-    expect(await spend.reserve([minute], 0)).toBeNull();
+    expect(await spend.reserve([minute])).toBeNull();
     state.down = false;
-    expect(await spend.reserve([minute], 0)).not.toBeNull();
+    expect(await spend.reserve([minute])).not.toBeNull();
     expect(logged).toEqual([]);
   });
 
@@ -118,15 +138,15 @@ describe("the durable quota store", () => {
     const database = fakeDatabase();
     const logged: LogLine[] = [];
     const throwing: SpendCalls = {
-      take: (budget, at, limit) =>
+      take: (budget, windowMs, limit) =>
         budget === "hour"
           ? Promise.reject(new Error("boom"))
-          : database.calls.take(budget, at, limit),
+          : database.calls.take(budget, windowMs, limit),
       refund: database.calls.refund,
     };
     const spend = createDurableQuotaStore(throwing, (line) => void logged.push(line));
-    expect(await spend.reserve([minute, hour], 0)).toBeNull();
-    expect(database.held("minute", 0)).toBe(0);
+    expect(await spend.reserve([minute, hour])).toBeNull();
+    expect(database.held("minute")).toBe(0);
     expect(logged).toEqual([
       { event: "refusal", route: "spend", status: 502, reason: "database_failed" },
     ]);
@@ -135,8 +155,8 @@ describe("the durable quota store", () => {
   it("gives back an earlier take when a later budget cannot be counted", async () => {
     const { spend, state, held } = store();
     state.failTakeFor = "hour";
-    expect(await spend.reserve([minute, hour], 0)).toBeNull();
-    expect(held("minute", 0)).toBe(0);
+    expect(await spend.reserve([minute, hour])).toBeNull();
+    expect(held("minute")).toBe(0);
   });
 });
 
@@ -157,30 +177,51 @@ describe("the database calls", () => {
     };
   }
 
-  it("calls spend_take with the window start as a timestamp", async () => {
-    const { calls: spend, sent } = calls(() => new Response("true"));
-    expect(await spend.take("day", DAY_MS, 500)).toBe(true);
+  const taken = '{"taken":true,"window_start":"2026-10-24T10:00:00.123456+00:00"}';
+
+  it("calls spend_take with the window length and reads the window it was counted in", async () => {
+    const { calls: spend, sent } = calls(() => new Response(taken));
+    expect(await spend.take("day", DAY_MS, 500)).toBe("2026-10-24T10:00:00.123456+00:00");
     expect(sent).toEqual([
       {
         url: "https://project.supabase.co/rest/v1/rpc/spend_take",
-        body: { p_budget: "day", p_window_start: "1970-01-02T00:00:00.000Z", p_limit: 500 },
+        body: { p_budget: "day", p_window_ms: DAY_MS, p_limit: 500 },
       },
     ]);
+  });
+
+  it("reads a spent budget as false", async () => {
+    const { calls: spend } = calls(() => new Response('{"taken":false}'));
+    expect(await spend.take("day", DAY_MS, 1)).toBe(false);
   });
 
   it("reads an error status or an unusable answer as a failure, never as a slot", async () => {
     const refused = calls(
       () => new Response('{"message":"relation spend_windows"}', { status: 400 }),
     );
-    expect(await refused.calls.take("day", 0, 1)).toBeNull();
-    const odd = calls(() => new Response('"yes"'));
-    expect(await odd.calls.take("day", 0, 1)).toBeNull();
-    expect(JSON.stringify([refused.logged, odd.logged])).not.toContain("spend_windows");
+    expect(await refused.calls.take("day", 1, 1)).toBeNull();
+    const unusable = [
+      '"yes"',
+      "true",
+      "null",
+      '{"taken":true}',
+      '{"taken":true,"window_start":""}',
+    ];
+    for (const body of unusable) {
+      const odd = calls(() => new Response(body));
+      expect(await odd.calls.take("day", 1, 1), body).toBeNull();
+      expect(odd.logged).toHaveLength(1);
+    }
+    expect(JSON.stringify(refused.logged)).not.toContain("spend_windows");
   });
 
-  it("counts a 204 as a refund that reached the database", async () => {
-    const { calls: spend } = calls(() => new Response(null, { status: 204 }));
-    expect(await spend.refund("day", 0)).toBe(true);
+  it("sends the window start back as the database wrote it, and counts a 204 as reached", async () => {
+    const { calls: spend, sent } = calls(() => new Response(null, { status: 204 }));
+    expect(await spend.refund("day", "2026-10-24T10:00:00.123456+00:00")).toBe(true);
+    expect(sent[0].body).toEqual({
+      p_budget: "day",
+      p_window_start: "2026-10-24T10:00:00.123456+00:00",
+    });
   });
 });
 

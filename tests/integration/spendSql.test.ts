@@ -13,8 +13,8 @@ import { createDurableQuotaStore, createSpendCalls } from "../../src/common/core
  */
 
 const MIGRATION = "supabase/migrations/20261024120000_spend_windows.sql";
-const WINDOW = "2026-10-24T10:00:00.000Z";
-const WINDOW_MS = Date.parse(WINDOW);
+const MINUTE_MS = 60_000;
+const DAY_MS = 86_400_000;
 
 let db: PGlite;
 
@@ -44,13 +44,26 @@ const calls = createSpendCalls({
 });
 const spend = createDurableQuotaStore(calls, log);
 
-const count = async (budget: string, windowStart = WINDOW) =>
+const count = async (budget: string) =>
   (
-    await db.query<{ count: number }>(
-      "select count from public.spend_windows where budget = $1 and window_start = $2",
-      [budget, windowStart],
-    )
+    await db.query<{ count: number }>("select count from public.spend_windows where budget = $1", [
+      budget,
+    ])
   ).rows[0]?.count;
+
+/**
+ * Moves time forward for a budget by moving its window back: the clock is
+ * the database's own. This in-process Postgres reads its clock to the
+ * millisecond, so it also waits one out, to keep the next window's start
+ * from equalling the old one's.
+ */
+const ageWindow = async (budget: string, ms: number) => {
+  await db.query(
+    "update public.spend_windows set window_start = window_start - $2 * interval '1 millisecond' where budget = $1",
+    [budget, ms],
+  );
+  await new Promise((done) => setTimeout(done, 5));
+};
 
 beforeAll(async () => {
   db = new PGlite();
@@ -72,41 +85,90 @@ afterAll(async () => {
 
 describe("the spend migration", () => {
   it("takes up to the limit in one window and refuses past it", async () => {
-    expect(await calls.take("day", WINDOW_MS, 2)).toBe(true);
-    expect(await calls.take("day", WINDOW_MS, 2)).toBe(true);
-    expect(await calls.take("day", WINDOW_MS, 2)).toBe(false);
+    expect(await calls.take("day", DAY_MS, 2)).toEqual(expect.any(String));
+    expect(await calls.take("day", DAY_MS, 2)).toEqual(expect.any(String));
+    expect(await calls.take("day", DAY_MS, 2)).toBe(false);
     expect(await count("day")).toBe(2);
-    expect(await calls.take("day", WINDOW_MS, 0)).toBe(false);
+    expect(await calls.take("day", DAY_MS, 0)).toBe(false);
+    expect(await calls.take("day", 0, 5)).toBe(false);
   });
 
-  it("refunds one in the exact window, never below zero", async () => {
-    await calls.take("day", WINDOW_MS, 5);
-    await calls.take("day", WINDOW_MS + 60_000, 5);
-    expect(await calls.refund("day", WINDOW_MS)).toBe(true);
-    expect(await calls.refund("day", WINDOW_MS)).toBe(true);
+  it("anchors a window to the first take, and every take in it reports the same start", async () => {
+    const first = await calls.take("minute", MINUTE_MS, 3);
+    const second = await calls.take("minute", MINUTE_MS, 3);
+    expect(first).toEqual(expect.any(String));
+    expect(second).toBe(first);
+  });
+
+  it("keeps a spent cap spent across a clock boundary that falls inside its window", async () => {
+    expect(await calls.take("minute", MINUTE_MS, 2)).toEqual(expect.any(String));
+    expect(await calls.take("minute", MINUTE_MS, 2)).toEqual(expect.any(String));
+    await ageWindow("minute", MINUTE_MS - 1_000);
+    expect(await calls.take("minute", MINUTE_MS, 2)).toBe(false);
+    expect(await count("minute")).toBe(2);
+  });
+
+  it("starts a new window at one take once the window has run its length", async () => {
+    await calls.take("minute", MINUTE_MS, 2);
+    await calls.take("minute", MINUTE_MS, 2);
+    await ageWindow("minute", MINUTE_MS);
+    expect(await calls.take("minute", MINUTE_MS, 2)).toEqual(expect.any(String));
+    expect(await count("minute")).toBe(1);
+    const { rows } = await db.query<{ age: number }>(
+      "select extract(epoch from now() - window_start) as age from public.spend_windows where budget = 'minute'",
+    );
+    expect(Number(rows[0].age)).toBeLessThan(5);
+  });
+
+  it("refunds one in the window it names, never below zero", async () => {
+    const window = (await calls.take("day", DAY_MS, 5)) as string;
+    await calls.take("day", DAY_MS, 5);
+    expect(await calls.refund("day", window)).toBe(true);
+    expect(await count("day")).toBe(1);
+    expect(await calls.refund("day", window)).toBe(true);
+    expect(await calls.refund("day", window)).toBe(true);
     expect(await count("day")).toBe(0);
-    expect(await count("day", "2026-10-24T10:01:00.000Z")).toBe(1);
   });
 
-  it("drops windows more than two days old", async () => {
-    await calls.take("minute", WINDOW_MS - 3 * 86_400_000, 1);
-    await calls.take("minute", WINDOW_MS, 1);
-    const { rows } = await db.query("select 1 from public.spend_windows");
-    expect(rows).toHaveLength(1);
+  it("leaves a newer window alone when an older one is refunded", async () => {
+    const old = (await calls.take("minute", MINUTE_MS, 5)) as string;
+    await ageWindow("minute", MINUTE_MS);
+    const current = (await calls.take("minute", MINUTE_MS, 5)) as string;
+    expect(current).not.toBe(old);
+    expect(await calls.refund("minute", old)).toBe(true);
+    expect(await count("minute")).toBe(1);
+    expect(await calls.refund("minute", current)).toBe(true);
+    expect(await count("minute")).toBe(0);
   });
 
-  it("works through the store, with a receipt tied to its windows", async () => {
+  it("counts each budget on its own row", async () => {
+    await calls.take("minute", MINUTE_MS, 1);
+    expect(await calls.take("hour", 3_600_000, 1)).toEqual(expect.any(String));
+    expect(await calls.take("minute", MINUTE_MS, 1)).toBe(false);
+  });
+
+  it("works through the store, with a receipt tied to its window", async () => {
     const budget = { scope: "global" as const, key: "hour", limit: 1, windowMs: 3_600_000 };
-    const receipt = await spend.reserve([budget], WINDOW_MS + 5);
+    const receipt = await spend.reserve([budget]);
     expect(receipt).not.toBeNull();
-    expect(await spend.reserve([budget], WINDOW_MS + 6)).toBeNull();
+    expect(await spend.reserve([budget])).toBeNull();
     await spend.refund(receipt!);
-    expect(await spend.reserve([budget], WINDOW_MS + 7)).not.toBeNull();
+    expect(await spend.reserve([budget])).not.toBeNull();
+  });
+
+  it("does not refund a receipt into a window that replaced the one it was taken in", async () => {
+    const budget = { scope: "global" as const, key: "minute", limit: 1, windowMs: MINUTE_MS };
+    const old = await spend.reserve([budget]);
+    await ageWindow("minute", MINUTE_MS);
+    expect(await spend.reserve([budget])).not.toBeNull();
+    await spend.refund(old!);
+    expect(await count("minute")).toBe(1);
+    expect(await spend.reserve([budget])).toBeNull();
   });
 
   it("is not callable by the public roles", async () => {
     await db.exec("set role anon");
-    const refused = await db.query("select public.spend_take('x', now(), 1)").then(
+    const refused = await db.query("select public.spend_take('x', 1000, 1)").then(
       () => null,
       (error: Error) => error.message,
     );

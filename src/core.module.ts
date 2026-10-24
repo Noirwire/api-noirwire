@@ -32,10 +32,9 @@ export class CoreModule {
           inject: [QUOTAS, RELAY],
           useFactory: (quotas: QuotaStore, relay: Relay): SpendStore =>
             chooseSpendStore({
-              database: config.rewards && {
-                url: config.auth.supabaseUrl,
-                secretKey: config.rewards.databaseSecretKey,
-              },
+              database: config.spendDatabaseSecretKey
+                ? { url: config.auth.supabaseUrl, secretKey: config.spendDatabaseSecretKey }
+                : null,
               quotas,
               relay,
               log,

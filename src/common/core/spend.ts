@@ -11,12 +11,16 @@ import type { Relay } from "./relay.js";
  * process, in a `QuotaStore`.
  *
  * It has the shape of `QuotaStore`'s `reserve` and `refund`, but answers
- * later, because the count is somewhere else. A budget here is counted in
- * fixed windows that start at a multiple of its length since 1970, not at
- * its first use, so every replica names the same window.
+ * later, because the count is somewhere else. A budget here has the same
+ * windows as in a `QuotaStore`: one starts at the budget's first use and
+ * runs for its length. The database's clock starts and ends it, so every
+ * replica names the same window.
  */
 export interface SpendStore {
-  /** One from every budget, or from none when any is spent or cannot be counted. */
+  /**
+   * One from every budget, or from none when any is spent or cannot be
+   * counted. The database store ignores `now`: its own clock decides.
+   */
   reserve(budgets: readonly Budget[], now?: number): Promise<QuotaReceipt | null>;
   /** Gives back what one `reserve` counted, once, and only in the very windows it counted. Never throws. */
   refund(receipt: QuotaReceipt): Promise<void>;
@@ -32,10 +36,14 @@ export function spendInMemory(quotas: QuotaStore): SpendStore {
 
 /** The two SQL functions, as calls. A failed call is `null`: it is never read as an answer. */
 export type SpendCalls = {
-  /** Whether one was taken from the budget's window that starts at `windowStartMs`. */
-  take(budget: string, windowStartMs: number, limit: number): Promise<boolean | null>;
+  /**
+   * The start of the window one was taken in (as the database wrote it,
+   * to be handed back to `refund` unchanged), or `false` when the budget is
+   * spent.
+   */
+  take(budget: string, windowMs: number, limit: number): Promise<string | false | null>;
   /** Whether the refund reached the database. */
-  refund(budget: string, windowStartMs: number): Promise<boolean>;
+  refund(budget: string, windowStart: string): Promise<boolean>;
 };
 
 export const SPEND_ROUTE = "spend";
@@ -80,14 +88,25 @@ export function createSpendCalls(deps: {
   }
 
   return {
-    async take(budget, windowStartMs, limit) {
+    async take(budget, windowMs, limit) {
       const answer = await call("spend_take", {
         p_budget: budget,
-        p_window_start: new Date(windowStartMs).toISOString(),
+        p_window_ms: windowMs,
         p_limit: limit,
       });
       if (answer === null) return null;
-      if (typeof answer.body === "boolean") return answer.body;
+      const { body } = answer;
+      if (typeof body === "object" && body !== null && "taken" in body) {
+        if (body.taken === false) return false;
+        if (
+          body.taken === true &&
+          "window_start" in body &&
+          typeof body.window_start === "string" &&
+          body.window_start !== ""
+        ) {
+          return body.window_start;
+        }
+      }
       log({
         event: "refusal",
         route: SPEND_ROUTE,
@@ -97,10 +116,10 @@ export function createSpendCalls(deps: {
       return null;
     },
 
-    async refund(budget, windowStartMs) {
+    async refund(budget, windowStart) {
       const answer = await call("spend_refund", {
         p_budget: budget,
-        p_window_start: new Date(windowStartMs).toISOString(),
+        p_window_start: windowStart,
       });
       return answer !== null;
     },
@@ -109,7 +128,9 @@ export function createSpendCalls(deps: {
 
 /**
  * The database when there is one, and otherwise the memory of this process
- * (a local run with no rewards database). Says which, once.
+ * (a local run with no database secret key). Says which, once. A deployment
+ * that must not count in memory refuses to start without the key (see
+ * `loadConfig`).
  */
 export function chooseSpendStore(deps: {
   database: { url: string; secretKey: string } | null;
@@ -126,7 +147,7 @@ export function chooseSpendStore(deps: {
   return createDurableQuotaStore(createSpendCalls({ ...database, relay, log }), log);
 }
 
-type Counted = { budget: string; windowStartMs: number };
+type Counted = { budget: string; windowStart: string };
 
 /**
  * Takes from each budget in turn and, when one is spent or the database does
@@ -139,10 +160,10 @@ export function createDurableQuotaStore(calls: SpendCalls, log: Log): SpendStore
   const claimed = new WeakMap<QuotaReceipt, Counted[]>();
 
   const giveBack = async (counted: readonly Counted[]) => {
-    for (const { budget, windowStartMs } of counted) {
+    for (const { budget, windowStart } of counted) {
       let reached = false;
       try {
-        reached = await calls.refund(budget, windowStartMs);
+        reached = await calls.refund(budget, windowStart);
       } catch {
         // Treated as not reached, below.
       }
@@ -153,21 +174,20 @@ export function createDurableQuotaStore(calls: SpendCalls, log: Log): SpendStore
   };
 
   return {
-    async reserve(budgets, now = Date.now()) {
+    async reserve(budgets) {
       const counted: Counted[] = [];
       for (const { key, limit, windowMs } of budgets) {
-        const windowStartMs = Math.floor(now / windowMs) * windowMs;
-        let taken: boolean | null = null;
+        let windowStart: string | false | null = null;
         try {
-          taken = await calls.take(key, windowStartMs, limit);
+          windowStart = await calls.take(key, windowMs, limit);
         } catch {
           log({ event: "refusal", route: SPEND_ROUTE, status: 502, reason: "database_failed" });
         }
-        if (taken !== true) {
+        if (!windowStart) {
           await giveBack(counted);
           return null;
         }
-        counted.push({ budget: key, windowStartMs });
+        counted.push({ budget: key, windowStart });
       }
       const receipt = {} as QuotaReceipt;
       claimed.set(receipt, counted);
