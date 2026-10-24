@@ -213,6 +213,54 @@ describe("the rewards routes", () => {
     expect((await state(member)).json.week.traders).toBe(1);
   });
 
+  it("counts joins on their own: three an hour for a session, twenty a day for an address, and not against the state budget", async () => {
+    const joinAs = async (token: string, ip: string) => {
+      const member = Keypair.generate();
+      const at = now();
+      const response = await api.call("/v1/rewards/join", {
+        token,
+        ip,
+        body: {
+          rewardsKey: keyOf(member),
+          at,
+          signature: signed(member, "join", keyOf(member), String(at), ""),
+        },
+      });
+      return response.status;
+    };
+    const session = await api.token({ sessionId: "one-session-joining" });
+    const perSession: number[] = [];
+    for (let i = 0; i < 5; i += 1) perSession.push(await joinAs(session, "198.51.100.1"));
+    expect(perSession).toEqual([200, 200, 200, 429, 429]);
+    // The session's reads are untouched by its joins.
+    const reader = Keypair.generate();
+    const at = now();
+    const read = await api.call("/v1/rewards/state", {
+      token: session,
+      ip: "198.51.100.1",
+      body: {
+        rewardsKey: keyOf(reader),
+        at,
+        signature: signed(reader, "state", keyOf(reader), String(at)),
+      },
+    });
+    expect(read.status).toBe(404);
+
+    const perAddress: number[] = [];
+    for (let i = 0; i < 22; i += 1)
+      perAddress.push(await joinAs(await api.token(), "198.51.100.2"));
+    expect(perAddress.slice(0, 20).every((status) => status === 200)).toBe(true);
+    expect(perAddress.slice(20)).toEqual([429, 429]);
+    expect(await joinAs(await api.token(), "198.51.100.3")).toBe(200);
+
+    const perSite: number[] = [];
+    for (let i = 0; i < 22; i += 1) {
+      perSite.push(await joinAs(await api.token(), `2001:db8:7:${i.toString(16)}::1`));
+    }
+    expect(perSite.slice(0, 20).every((status) => status === 200)).toBe(true);
+    expect(perSite.slice(20)).toEqual([429, 429]);
+  });
+
   it("POST /v1/rewards/join makes a member, with the database key in both headers and nothing of the caller", async () => {
     const token = await api.token();
     const member = Keypair.generate();

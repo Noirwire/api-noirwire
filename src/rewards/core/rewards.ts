@@ -10,7 +10,14 @@ import {
 } from "../../common/core/answer.js";
 import type { Log } from "../../common/core/log.js";
 import { PROVIDER_RETRY_AFTER_SECONDS } from "../../common/core/providerGate.js";
-import type { Caller, RouteLimits } from "../../common/core/quota.js";
+import { wideKeyOf } from "../../common/core/clientIp.js";
+import {
+  HOUR_MS,
+  MINUTE_MS,
+  type Budget,
+  type Caller,
+  type RouteLimits,
+} from "../../common/core/quota.js";
 import { DOUBLE_HOUR_MS, readClaim } from "./claim.js";
 import { REWARDS_ROUTE } from "./database.js";
 import { rewardsMessage, signatureVerifies, timely } from "./messages.js";
@@ -51,6 +58,38 @@ export const REWARDS_LIMITS: RouteLimits = { perSession: 30, perIp: 300, total: 
  */
 export const CLAIM_ROUTE = "rewards-claim";
 export const CLAIM_LIMITS: RouteLimits = { perSession: 12, perIp: 120, total: 240 };
+
+/**
+ * A join makes a member, and members are rationed in total by the day, so
+ * joins are counted on their own and far lower than reads: a wallet joins
+ * once, and a few more times when it is retried. Were they to share the
+ * budget of the reads, one session could fill the day's cap in an hour.
+ */
+export const JOIN_ROUTE = "rewards-join";
+export const JOIN_LIMITS = { perSessionPerHour: 3, perIpPerDay: 20 };
+
+/** An IPv6 address is counted at its /64 and at its /48, so a whole /48 buys no more joins than one address. */
+export const joinBudgets = (caller: Caller): Budget[] => {
+  const wide = wideKeyOf(caller.ip);
+  const perAddress = (key: string): Budget => ({
+    scope: "ip",
+    key: `${JOIN_ROUTE}|${key}`,
+    limit: JOIN_LIMITS.perIpPerDay,
+    windowMs: DAY_MS,
+  });
+  return [
+    {
+      scope: "session",
+      key: `${JOIN_ROUTE}|${caller.sessionId}`,
+      limit: JOIN_LIMITS.perSessionPerHour,
+      windowMs: HOUR_MS,
+    },
+    perAddress(caller.ip),
+    ...(wide === caller.ip ? [] : [perAddress(wide)]),
+    // The one total the config and state routes share.
+    { scope: "global", key: REWARDS_ROUTE, limit: REWARDS_LIMITS.total, windowMs: MINUTE_MS },
+  ];
+};
 
 /** No 0 or 1, no I or O: a code read aloud or copied by hand has one spelling. */
 export const CODE_ALPHABET = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";

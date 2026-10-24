@@ -15,6 +15,8 @@ import {
   CLAIM_LIMITS,
   CLAIM_ROUTE,
   CODE_LENGTH,
+  JOIN_LIMITS,
+  joinBudgets,
   REWARDS_LIMITS,
   REWARDS_MAX_BODY_BYTES,
   type Rewards,
@@ -52,7 +54,7 @@ const NO_WALLET_ADDRESS = `**Contains wallet addresses: no.** ${THE_REWARDS_KEY}
 const KEPT =
   "**Stored:** the rewards key, its referral code, who invited it, the week and the UTC day it joined, its member number, its fee total per week (as paid and as counted) and its points. Never a portfolio, a transaction, a session id, an IP address or a time of day.";
 
-const QUOTAS = `**Quotas (per minute):** ${REWARDS_LIMITS.perSession} per session, ${REWARDS_LIMITS.perIp} per address, ${REWARDS_LIMITS.total} in total, shared by the config, join and state routes.`;
+const QUOTAS = `**Quotas (per minute):** ${REWARDS_LIMITS.perSession} per session, ${REWARDS_LIMITS.perIp} per address, ${REWARDS_LIMITS.total} in total, shared by the config and state routes. A join is counted on its own: ${JOIN_LIMITS.perSessionPerHour} per session an hour and ${JOIN_LIMITS.perIpPerDay} per address a day.`;
 
 const LOGGED =
   "**Logged:** the route pattern, the status and the duration, and for a refusal one fixed word. Never a key, a signature, a code, a portfolio or a transaction.";
@@ -388,8 +390,14 @@ export class RewardsController {
       },
     },
   )
-  join(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
-    return this.answer(req, res, RULE, (body) => this.rewards.join(body));
+  async join(@Req() req: SessionRequest, @Res() res: Response): Promise<void> {
+    const admitted = await this.admission.with(
+      req,
+      joinBudgets(callerOf(req, this.config)),
+      REWARDS_MAX_BODY_BYTES,
+    );
+    if ("refused" in admitted) return send(res, admitted.refused);
+    send(res, await this.rewards.join(admitted.body));
   }
 
   @Post("state")
