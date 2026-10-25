@@ -2,16 +2,25 @@ import { Keypair, Transaction } from "@solana/web3.js";
 import { beforeEach, describe, expect, it } from "vitest";
 import { base58 } from "../../src/chain/core/bytes.js";
 import { signerOf } from "../../src/chain/core/signatures.js";
+import { rateKeyOf } from "../../src/common/core/clientIp.js";
 import type { LogLine } from "../../src/common/core/log.js";
-import { createMemoryQuotaStore, type Caller } from "../../src/common/core/quota.js";
+import {
+  createMemoryQuotaStore,
+  HOUR_MS,
+  type Caller,
+  type QuotaStore,
+} from "../../src/common/core/quota.js";
 import { spendInMemory } from "../../src/common/core/spend.js";
 import {
   CONFIRM_TIMEOUT_MS,
   createProfiles,
+  CREATIONS_PER_DAY_PER_IP,
   CREATIONS_PER_HOUR_PER_IP,
   CREATIONS_PER_HOUR_PER_SESSION,
   DAY_MS,
+  WRITES_PER_HOUR_PER_IP,
   WRITES_PER_HOUR_PER_SESSION,
+  WRITES_PER_HOUR_TOTAL,
   type Profiles,
 } from "../../src/profile/core/profiles.js";
 import { FIRST_PROGRAM_ERROR, PROGRAM_ERRORS } from "../../src/profile/core/program.js";
@@ -58,7 +67,9 @@ const rollup: Rollup = {
   },
 };
 
-function profiles(options: { off?: boolean; dailyCreateCap?: number } = {}): Profiles {
+function profiles(
+  options: { off?: boolean; dailyCreateCap?: number; quotas?: QuotaStore } = {},
+): Profiles {
   const signAsGate = signerOf(gate.secretKey);
   return createProfiles({
     upstream: options.off
@@ -72,7 +83,7 @@ function profiles(options: { off?: boolean; dailyCreateCap?: number } = {}): Pro
             return signAsGate(message);
           },
         },
-    quotas: createMemoryQuotaStore(),
+    quotas: options.quotas ?? createMemoryQuotaStore(),
     spend: spendInMemory(createMemoryQuotaStore()),
     log: (line) => void logged.push(line),
     now: () => clock,
@@ -269,6 +280,56 @@ describe("the creation budgets", () => {
     expect(signed).toBe(CREATIONS_PER_HOUR_PER_IP);
   });
 
+  it("lets one address create only so many a day, even when each hour's allowance has passed", async () => {
+    const api = profiles();
+    const ip = "203.0.113.6";
+    let session = 0;
+    const fromIp = () => ({ sessionId: `day-${(session += 1)}`, ip });
+    for (let hour = 0; hour < CREATIONS_PER_DAY_PER_IP / CREATIONS_PER_HOUR_PER_IP; hour += 1) {
+      for (let i = 0; i < CREATIONS_PER_HOUR_PER_IP; i += 1) {
+        expect((await submit(api, creation(), fromIp())).status).toBe(200);
+      }
+      clock += HOUR_MS;
+    }
+    expect(await outcome(submit(api, creation(), fromIp()))).toEqual([429, "rate_limited"]);
+    expect(signed).toBe(CREATIONS_PER_DAY_PER_IP);
+    clock += DAY_MS;
+    expect((await submit(api, creation(), fromIp())).status).toBe(200);
+  });
+
+  it("counts the /48 around two /64s, so together they get no more daily creations than one address", async () => {
+    const api = profiles();
+    const sites = ["2001:db8:1:1::1", "2001:db8:1:2::1"].map((address) => rateKeyOf(address));
+    let session = 0;
+    const from = (n: number) => ({ sessionId: `wide-${(session += 1)}`, ip: sites[n % 2] });
+    for (let hour = 0; hour < CREATIONS_PER_DAY_PER_IP / CREATIONS_PER_HOUR_PER_IP; hour += 1) {
+      for (let i = 0; i < CREATIONS_PER_HOUR_PER_IP; i += 1) {
+        expect((await submit(api, creation(), from(i))).status).toBe(200);
+      }
+      clock += HOUR_MS;
+    }
+    expect(await outcome(submit(api, creation(), from(0)))).toEqual([429, "rate_limited"]);
+    expect(await outcome(submit(api, creation(), from(1)))).toEqual([429, "rate_limited"]);
+    expect(signed).toBe(CREATIONS_PER_DAY_PER_IP);
+  });
+
+  it("does not spend an address's daily creations on one the daily cap refused", async () => {
+    const api = profiles({ dailyCreateCap: 1 });
+    expect((await submit(api, creation(), stranger())).status).toBe(200);
+    const ip = "203.0.113.7";
+    const attempts = CREATIONS_PER_DAY_PER_IP + 5;
+    for (let i = 0; i < attempts; i += 1) {
+      expect(await outcome(submit(api, creation(), { sessionId: `refused-${i}`, ip }))).toEqual([
+        429,
+        "rate_limited",
+      ]);
+      if (i % CREATIONS_PER_HOUR_PER_IP === CREATIONS_PER_HOUR_PER_IP - 1) clock += HOUR_MS;
+    }
+    expect(
+      logged.filter((line) => "reason" in line && line.reason === "daily_create_cap_reached"),
+    ).toHaveLength(attempts);
+  });
+
   it("stops signing creations at the daily cap, whoever asks, and goes on writing and closing", async () => {
     const api = profiles({ dailyCreateCap: 2 });
     expect((await submit(api, creation())).status).toBe(200);
@@ -337,6 +398,60 @@ describe("the creation budgets", () => {
     expect(signed).toBe(WRITES_PER_HOUR_PER_SESSION);
     // A closing is never held back: the owner needs nobody's leave to delete their record.
     expect((await submit(api, genuine.close(), caller)).status).toBe(200);
+  });
+
+  it("lets one address write only so often, however many sessions it holds", async () => {
+    const api = profiles();
+    const ip = "203.0.113.8";
+    for (let i = 0; i < WRITES_PER_HOUR_PER_IP; i += 1) {
+      expect((await submit(api, genuine.write(), { sessionId: `w-${i}`, ip })).status).toBe(200);
+    }
+    expect(await outcome(submit(api, genuine.write(), { sessionId: "one-more", ip }))).toEqual([
+      429,
+      "rate_limited",
+    ]);
+    expect(signed).toBe(WRITES_PER_HOUR_PER_IP);
+    clock += HOUR_MS;
+    expect((await submit(api, genuine.write(), { sessionId: "later", ip })).status).toBe(200);
+  });
+
+  it("stops signing writes once the hour's total is reached, whoever asks", async () => {
+    const quotas = createMemoryQuotaStore();
+    const totalWrites = {
+      scope: "global",
+      key: "profile-write|hour",
+      limit: WRITES_PER_HOUR_TOTAL,
+      windowMs: HOUR_MS,
+    } as const;
+    for (let i = 0; i < WRITES_PER_HOUR_TOTAL - 1; i += 1) {
+      expect(quotas.take([totalWrites], clock)).toBe(true);
+    }
+    const api = profiles({ quotas });
+    expect((await submit(api, genuine.write())).status).toBe(200);
+    expect(await outcome(submit(api, genuine.write()))).toEqual([429, "rate_limited"]);
+    expect(signed).toBe(1);
+    expect((await submit(api, genuine.close())).status).toBe(200);
+  });
+
+  it("spends none of a write's other budgets when one of them refuses it", async () => {
+    const api = profiles();
+    const ip = "203.0.113.9";
+    for (let i = 0; i < WRITES_PER_HOUR_PER_IP; i += 1) {
+      await submit(api, genuine.write(), { sessionId: `fill-${i}`, ip });
+    }
+    const session = "kept";
+    for (let i = 0; i < WRITES_PER_HOUR_PER_SESSION + 5; i += 1) {
+      expect(await outcome(submit(api, genuine.write(), { sessionId: session, ip }))).toEqual([
+        429,
+        "rate_limited",
+      ]);
+    }
+    const elsewhere = { sessionId: session, ip: "203.0.113.10" };
+    for (let i = 0; i < WRITES_PER_HOUR_PER_SESSION; i += 1) {
+      expect((await submit(api, genuine.write(), elsewhere)).status).toBe(200);
+    }
+    expect((await submit(api, genuine.write(), elsewhere)).status).toBe(429);
+    expect(signed).toBe(WRITES_PER_HOUR_PER_IP + WRITES_PER_HOUR_PER_SESSION);
   });
 });
 
