@@ -13,6 +13,8 @@
 
 **NoirWire is a non-custodial Solana wallet, and this is the one server its web and mobile apps talk to: it relays their requests to the RPC provider, Jupiter, MagicBlock and NoirWire's fee relayer, so each of those sees this server's address and never a user's next to their wallet addresses.**
 
+NoirWire's main product is NoirWire Dark Pool, a private order book for SOL-PERP on Solana mainnet at https://terminal.noirwire.com. The NoirWire Wallet at https://app.noirwire.com also runs on mainnet.
+
 - A wallet address is treated as a secret. Nothing of a caller is forwarded upstream, stored or logged: not an IP, a token, an address, a transaction or a query string. The one thing kept at all is the optional rewards ledger, under a key that is not a wallet address.
 - It is not an open proxy. Every route takes a closed list of methods or paths, a bounded body and a bounded answer, and refuses the rest.
 - The fee relayer signs only what this server has checked itself: the whole transaction template, the portfolio's own signature, and a price worked out from a SOL price it reads independently.
