@@ -25,7 +25,7 @@ import {
 import { createRelayer, type Relayer } from "../../src/relayer/core/relayer.js";
 import {
   createSolPrice,
-  decodePythPrice,
+  decodeMagicblockPrice,
   MIN_SOL_PRICE_USD,
 } from "../../src/relayer/core/solPrice.js";
 import {
@@ -34,8 +34,8 @@ import {
   mintAccount,
   OPENING_FEE,
   PLAIN_FEE,
-  PYTH_ACCOUNT,
-  pythAccount,
+  MAGICBLOCK_ACCOUNT,
+  magicblockAccount,
   rentOf,
   scenario,
   tracker,
@@ -82,7 +82,7 @@ let koraPrice: number | null;
 let priceAge: number;
 let trackerExtensions: [type: number, length: number][];
 let readableMints: boolean;
-let pythReads: number;
+let priceReads: number;
 let koraAnswer: (method: string, params: Params, url: string) => Response;
 let throwOn: ((method: string) => string | null) | null;
 let subject: Relayer;
@@ -105,9 +105,9 @@ function koraEstimate(lamports: number, signer = relayer.publicKey.toBase58()) {
 const chain: ChainReader = {
   async getAccountInfo(address: PublicKey) {
     const key = address.toBase58();
-    if (key === PYTH_ACCOUNT) {
-      pythReads += 1;
-      return solPrice === null ? null : pythAccount(solPrice, priceAge, { now: clock });
+    if (key === MAGICBLOCK_ACCOUNT) {
+      priceReads += 1;
+      return solPrice === null ? null : magicblockAccount(solPrice, priceAge, { now: clock });
     }
     if (!readableMints) return null;
     if (key === tracker.mint.toBase58()) {
@@ -202,7 +202,7 @@ beforeEach(() => {
   priceAge = 5;
   trackerExtensions = [[ExtensionType.TransferHook, 64]];
   readableMints = true;
-  pythReads = 0;
+  priceReads = 0;
   throwOn = null;
   koraAnswer = (method, params) => {
     const signer = relayer.publicKey.toBase58();
@@ -471,21 +471,31 @@ describe("the relayer route", () => {
     expect(koraCallsOf("estimateTransactionFee")).toHaveLength(1);
   });
 
-  it("prices nothing by a price that is stale, unverified, uncertain or not Pyth's", async () => {
+  it("prices nothing by a price that is stale, unverified, malformed or not MagicBlock's", async () => {
     const at = { now: clock };
-    const usable = (account: ReturnType<typeof pythAccount> | null) =>
-      decodePythPrice(account, Math.floor(clock / 1000));
-    expect(usable(pythAccount(150, 5, at))).toBeCloseTo(150);
-    expect(usable(pythAccount(150, 121, at))).toBeNull();
-    expect(usable(pythAccount(150, -121, at))).toBeNull();
-    expect(usable(pythAccount(150, 5, { ...at, verified: 0 }))).toBeNull();
-    expect(usable(pythAccount(150, 5, { ...at, confidence: 200_000_000n }))).toBeNull();
-    expect(usable({ ...pythAccount(150, 5, at), owner: Keypair.generate().publicKey })).toBeNull();
-    const otherFeed = pythAccount(150, 5, at);
+    const usable = (account: ReturnType<typeof magicblockAccount> | null) =>
+      decodeMagicblockPrice(account, Math.floor(clock / 1000));
+    expect(usable(magicblockAccount(150, 5, at))).toBeCloseTo(150);
+    expect(usable(magicblockAccount(150, 121, at))).toBeNull();
+    expect(usable(magicblockAccount(150, -5, at))).toBeCloseTo(150);
+    expect(usable(magicblockAccount(150, -6, at))).toBeNull();
+    expect(usable(magicblockAccount(150, -121, at))).toBeNull();
+    expect(usable(magicblockAccount(150, 5, { ...at, verified: 0 }))).toBeNull();
+    expect(usable(magicblockAccount(150, 5, { ...at, exponent: 7 }))).toBeNull();
+    expect(usable(magicblockAccount(150, 5, { ...at, exponent: -8 }))).toBeNull();
+    expect(usable(magicblockAccount(0, 5, at))).toBeNull();
+    expect(
+      usable({ ...magicblockAccount(150, 5, at), owner: Keypair.generate().publicKey }),
+    ).toBeNull();
+    const otherFeed = magicblockAccount(150, 5, at);
     otherFeed.data[41] ^= 1;
     expect(usable(otherFeed)).toBeNull();
-    const truncated = pythAccount(150, 5, at);
+    const otherKind = magicblockAccount(150, 5, at);
+    otherKind.data[0] ^= 1;
+    expect(usable(otherKind)).toBeNull();
+    const truncated = magicblockAccount(150, 5, at);
     expect(usable({ ...truncated, data: truncated.data.subarray(0, 100) })).toBeNull();
+    expect(usable(magicblockAccount(150, 5, { ...at, length: 135 }))).toBeNull();
     expect(usable(null)).toBeNull();
 
     priceAge = 300;
@@ -494,14 +504,37 @@ describe("the relayer route", () => {
     expect(upstream).toHaveLength(0);
   });
 
+  it("has no price, and so prices nothing, without a rollup to read it from", async () => {
+    expect(await createSolPrice(null)(clock)).toBeNull();
+    solPrice = SOL_PRICE;
+    expect(await createSolPrice(chain)(clock)).toBeCloseTo(SOL_PRICE);
+  });
+
   it("uses one read of the price for thirty seconds and no longer", async () => {
     await call("estimateTransactionFee", estimateParams(genuine.sendUsdc()));
     clock += 29_000;
     await call("estimateTransactionFee", estimateParams(genuine.sendUsdc()));
-    expect(pythReads).toBe(1);
+    expect(priceReads).toBe(1);
     clock += 2_000;
     await call("estimateTransactionFee", estimateParams(genuine.sendUsdc()));
-    expect(pythReads).toBe(2);
+    expect(priceReads).toBe(2);
+  });
+
+  it("does not serve a cached price that has aged past the limit", async () => {
+    solPrice = SOL_PRICE;
+    priceAge = 119;
+    const price = createSolPrice(chain);
+    expect(await price(clock)).toBeCloseTo(SOL_PRICE);
+    expect(priceReads).toBe(1);
+
+    clock += 1_000;
+    expect(await price(clock)).toBeCloseTo(SOL_PRICE);
+    expect(priceReads).toBe(1);
+
+    priceAge = 300;
+    clock += 28_000;
+    expect(await price(clock)).toBeNull();
+    expect(priceReads).toBe(2);
   });
 
   it("prices and signs nothing while its price and the relayer's disagree", async () => {

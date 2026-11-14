@@ -9,7 +9,17 @@ import type { SpendStore } from "../common/core/spend.js";
 import type { Config } from "../config/core/config.js";
 import { SERVER_KEY } from "../common/core/providerGate.js";
 import type { RpcGates } from "../core.module.js";
-import { CHAIN, CONFIG, LOG, QUOTAS, RELAY, RELAYER, RPC_GATES, SPEND } from "../tokens.js";
+import {
+  CHAIN,
+  CONFIG,
+  LOG,
+  QUOTAS,
+  RELAY,
+  RELAYER,
+  ROLLUP_CHAIN,
+  RPC_GATES,
+  SPEND,
+} from "../tokens.js";
 import { createAccountRent } from "./core/accountRent.js";
 import { createRelayer } from "./core/relayer.js";
 import { createSolPrice } from "./core/solPrice.js";
@@ -18,37 +28,49 @@ import { RelayerController } from "./relayer.controller.js";
 /** How long the server waits for one of its own chain reads: the SOL price, a mint, the rent. */
 const CHAIN_READ_TIMEOUT_MS = 8_000;
 
+function readerOf(url: string, gates: RpcGates): ChainReader {
+  return new Connection(url, {
+    commitment: "confirmed",
+    // A read that does not come back is no price: nothing is priced or
+    // signed without one, so it must fail and not hang.
+    // These reads count against the provider's allowance like any other.
+    fetch: (async (input: string, init?: RequestInit) => {
+      if (!(await gates.all.acquire(SERVER_KEY))) throw new Error("RPC allowance spent.");
+      return fetch(input, {
+        ...init,
+        signal: AbortSignal.timeout(CHAIN_READ_TIMEOUT_MS),
+        redirect: "error",
+      });
+    }) as unknown as typeof fetch,
+    disableRetryOnRateLimit: true,
+  });
+}
+
 @Module({
   controllers: [RelayerController],
   providers: [
     {
-      // The chain as this server reads it for itself: the SOL price and the
-      // rent of an account, straight from its own RPC provider.
+      // The chain as this server reads it for itself: the rent of an
+      // account and the mints, straight from its own RPC provider.
       provide: CHAIN,
       inject: [CONFIG, RPC_GATES],
-      useFactory: (config: Config, gates: RpcGates): ChainReader =>
-        new Connection(config.rpcUrl, {
-          commitment: "confirmed",
-          // A read that does not come back is no price: nothing is priced or
-          // signed without one, so it must fail and not hang.
-          // These reads count against the provider's allowance like any other.
-          fetch: (async (input: string, init?: RequestInit) => {
-            if (!(await gates.all.acquire(SERVER_KEY))) throw new Error("RPC allowance spent.");
-            return fetch(input, {
-              ...init,
-              signal: AbortSignal.timeout(CHAIN_READ_TIMEOUT_MS),
-              redirect: "error",
-            });
-          }) as unknown as typeof fetch,
-          disableRetryOnRateLimit: true,
-        }),
+      useFactory: (config: Config, gates: RpcGates): ChainReader => readerOf(config.rpcUrl, gates),
+    },
+    {
+      // The rollup that holds MagicBlock's price account, read only for the
+      // SOL price. Null when no rollup RPC is configured.
+      provide: ROLLUP_CHAIN,
+      inject: [CONFIG, RPC_GATES],
+      useFactory: (config: Config, gates: RpcGates): ChainReader | null =>
+        config.rollupRpcUrl === null ? null : readerOf(config.rollupRpcUrl, gates),
     },
     {
       provide: RELAYER,
-      inject: [CONFIG, CHAIN, RELAY, QUOTAS, SPEND, LOG],
+      inject: [CONFIG, CHAIN, ROLLUP_CHAIN, RELAY, QUOTAS, SPEND, LOG],
       useFactory: (
         config: Config,
         chain: ChainReader,
+        rollup: ChainReader | null,
         relay: Relay,
         quotas: QuotaStore,
         spend: SpendStore,
@@ -58,7 +80,7 @@ const CHAIN_READ_TIMEOUT_MS = 8_000;
           upstream: config.relayer,
           usdcMint: usdcMint(config.network),
           relay,
-          solPrice: createSolPrice(chain, log),
+          solPrice: createSolPrice(rollup, log),
           accountRent: createAccountRent(chain),
           quotas,
           spend,

@@ -624,25 +624,27 @@ export function coSigned(encoded: string, feePayer: Keypair): string {
   return Buffer.from(transaction.serialize()).toString("base64");
 }
 
-export const PYTH_ACCOUNT = "7UVimffxr9ow1uXYxsr4LHAcV58mLzhmwaeKvJ1pjLiE";
-const PYTH_RECEIVER = new PublicKey("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ");
-const SOL_USD_FEED = "ef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d";
+export const MAGICBLOCK_ORACLE = new PublicKey("PriCems5tHihc6UDXDjzjeawomAwBduWMGAi8ZUjppd");
+/** The oracle's SOL/USD price account: feed number 6, derived under the oracle program. */
+export const MAGICBLOCK_ACCOUNT = PublicKey.findProgramAddressSync(
+  [Buffer.from("price_feed"), Buffer.from("pyth-lazer"), Buffer.from("6")],
+  MAGICBLOCK_ORACLE,
+)[0].toBase58();
 
-/** Pyth's price account as its receiver program writes it. */
-export function pythAccount(
+/** MagicBlock's SOL/USD price account as its oracle program writes it. */
+export function magicblockAccount(
   usd: number,
   ageSeconds: number,
-  over: { verified?: number; confidence?: bigint; now?: number } = {},
+  over: { verified?: number; exponent?: number; length?: number; now?: number } = {},
 ) {
-  const data = Buffer.alloc(134);
+  const data = Buffer.alloc(over.length ?? 134);
+  Buffer.from([234, 161, 14, 36, 172, 239, 15, 232]).copy(data, 0);
   data[40] = over.verified ?? 1;
-  Buffer.from(SOL_USD_FEED, "hex").copy(data, 41);
-  const price = BigInt(Math.round(usd * 1e8));
-  data.writeBigInt64LE(price, 73);
-  data.writeBigUInt64LE(over.confidence ?? price / 1_000n, 81);
-  data.writeInt32LE(-8, 89);
+  new PublicKey(MAGICBLOCK_ACCOUNT).toBuffer().copy(data, 41);
+  data.writeBigInt64LE(BigInt(Math.round(usd * 1e8)), 73);
+  data.writeInt32LE(over.exponent ?? 8, 89);
   data.writeBigInt64LE(BigInt(Math.floor((over.now ?? Date.now()) / 1000) - ageSeconds), 93);
-  return { owner: PYTH_RECEIVER, data, lamports: 1, executable: false, rentEpoch: 0 };
+  return { owner: MAGICBLOCK_ORACLE, data, lamports: 1, executable: false, rentEpoch: 0 };
 }
 
 /** A mint account, with the given Token-2022 extensions when it has any. */

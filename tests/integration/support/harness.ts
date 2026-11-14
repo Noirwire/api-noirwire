@@ -59,6 +59,7 @@ export async function startApi(env: Record<string, string> = {}): Promise<Api> {
   const config = loadConfig({
     SOLANA_NETWORK: "devnet",
     SOLANA_RPC_URL: providers.urlOf("rpc"),
+    ROLLUP_RPC_URL: providers.urlOf("rpc"),
     JUPITER_API_URL: providers.urlOf("jupiter"),
     JUPITER_API_KEY: "server-jupiter-key",
     MAGICBLOCK_API_URL: providers.urlOf("magicblock"),

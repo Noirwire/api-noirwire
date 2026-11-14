@@ -76,6 +76,8 @@ export type Config = {
   network: Network;
   /** The RPC provider, key included. */
   rpcUrl: string;
+  /** The RPC of the rollup that holds MagicBlock's SOL/USD price, or null when none is set. */
+  rollupRpcUrl: string | null;
   jupiter: { url: string; apiKey: string | null; referral: JupiterReferral | null };
   privatePaymentsUrl: string;
   priceHistoryUrl: string;
@@ -168,6 +170,19 @@ export function loadConfig(env: Env): Config {
     const otherNetworkNamed = networkName === "mainnet" ? /devnet|testnet/i : /mainnet/i;
     if (otherNetworkNamed.test(rpcUrl)) {
       problems.push(`SOLANA_RPC_URL names a different network than "${networkName}".`);
+    }
+  }
+
+  let rollupRpcUrl: string | null = null;
+  const rollupRpc = read("ROLLUP_RPC_URL");
+  if (rollupRpc) {
+    const parsed = httpUrl.safeParse(rollupRpc);
+    if (!parsed.success || new URL(parsed.data).search !== "") {
+      problems.push("ROLLUP_RPC_URL must be an http(s) URL with no query string.");
+    } else if (!parsed.data.startsWith("https://") && !isLocal(parsed.data)) {
+      problems.push("ROLLUP_RPC_URL must use https.");
+    } else {
+      rollupRpcUrl = parsed.data;
     }
   }
 
@@ -281,6 +296,7 @@ export function loadConfig(env: Env): Config {
     port: port.success ? port.data : 4000,
     network: networkName,
     rpcUrl,
+    rollupRpcUrl,
     jupiter: {
       url: url("JUPITER_API_URL", "https://api.jup.ag"),
       apiKey: read("JUPITER_API_KEY") || null,
