@@ -201,8 +201,8 @@ type Forwarded = {
 
 /**
  * How far the relayer's own SOL price may sit from this server's before
- * nothing is priced or signed. The two come from different sources, Pyth
- * here and the relayer's own there, and agree to within a fraction of a
+ * nothing is priced or signed. The two come from different sources, MagicBlock's
+ * oracle here and the relayer's own there, and agree to within a fraction of a
  * percent when both are right. Past this one of them is wrong, and which
  * one is not for a request to find out.
  */

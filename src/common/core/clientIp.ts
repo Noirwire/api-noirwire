@@ -7,9 +7,9 @@ import { createHash, timingSafeEqual } from "node:crypto";
  * and is not read at all.
  *
  * - With no trusted proxy, the address is the socket's.
- * - With one (Railway's edge), it is the `x-real-ip` header, which Railway
- *   documents as the one "for identifying client's remote IP" and sets
- *   itself on every request it passes on. When that header is missing or is
+ * - With one (the trusted proxy in front of the API; on the k3s cluster the
+ *   edge nginx), it is the `x-real-ip` header, which that proxy sets itself
+ *   on every request it passes on. When that header is missing or is
  *   not an address, the request did not come the way it should have, and the
  *   address falls back to the socket's, never to another header.
  * - The web app's own server forwards its pages' requests, so those arrive

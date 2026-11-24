@@ -15,7 +15,7 @@ import type { Received, Reply } from "./support/providers.js";
 
 /**
  * The relayer route over real HTTP, with two stand-in Kora replicas and a
- * stand-in RPC that serves Pyth's price account, the mints and the rent.
+ * stand-in RPC that serves MagicBlock's price account, the mints and the rent.
  */
 
 const first = scenario();

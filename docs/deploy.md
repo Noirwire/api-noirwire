@@ -1,3 +1,5 @@
+> **Deployed on the k3s cluster.** This API is deployed to our k3s cluster by the infra-noirwire repo; see the section "Moving the API, the fee relayer and the refill job off Railway" in that repo's `docs/k3s.md`. The Railway steps below describe the old setup, kept only until it is switched off. Put no new setting on Railway.
+
 # Deploying on Railway
 
 One Railway service, `api`, in the relayer's Railway project. Everything except six values (and the profile and rewards values, when those are on) is code: `.railway/railway.ts` (builder, health check, restart policy, one replica, the relayer's values by reference) and the defaults in `src/config/core/config.ts`.
@@ -17,6 +19,7 @@ One Railway service, `api`, in the relayer's Railway project. Everything except 
 
 ```
 SOLANA_RPC_URL=https://<mainnet RPC provider, key included>
+ROLLUP_RPC_URL=https://<the rollup's RPC that serves MagicBlock's price account, no query string>
 SUPABASE_URL=https://<project>.supabase.co
 SUPABASE_PUBLISHABLE_KEY=<publishable key>
 ALLOWED_ORIGINS=https://app.noirwire.com

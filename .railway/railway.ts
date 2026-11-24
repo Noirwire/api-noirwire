@@ -14,6 +14,7 @@ if (!repo) throw new Error("The origin remote is not a GitHub repository.");
 // Set by hand once, in the service's raw variable editor. Railway keeps them.
 const SET_BY_HAND = [
   "SOLANA_RPC_URL",
+  "ROLLUP_RPC_URL",
   "SUPABASE_URL",
   "SUPABASE_PUBLISHABLE_KEY",
   "ALLOWED_ORIGINS",

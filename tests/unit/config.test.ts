@@ -37,6 +37,7 @@ describe("the configuration", () => {
       port: 4000,
       network: "devnet",
       rpcUrl: "https://api.devnet.solana.com",
+      rollupRpcUrl: null,
       jupiter: { url: "https://api.jup.ag", apiKey: null, referral: null },
       privatePaymentsUrl: "https://payments.magicblock.app",
       priceHistoryUrl: "https://datapi.jup.ag",
@@ -186,6 +187,25 @@ describe("the configuration", () => {
     );
     expect(loadConfig({ ...base, SUPABASE_URL: "http://localhost:54421" }).auth.jwksUrl).toBe(
       "http://localhost:54421/auth/v1/.well-known/jwks.json",
+    );
+  });
+
+  it("takes the rollup RPC as an optional https URL with no query string", () => {
+    expect(loadConfig(base).rollupRpcUrl).toBeNull();
+    expect(loadConfig({ ...base, ROLLUP_RPC_URL: "https://rollup.example.com" }).rollupRpcUrl).toBe(
+      "https://rollup.example.com",
+    );
+    expect(loadConfig({ ...base, ROLLUP_RPC_URL: "http://127.0.0.1:8899" }).rollupRpcUrl).toBe(
+      "http://127.0.0.1:8899",
+    );
+    expect(problems({ ...base, ROLLUP_RPC_URL: "ftp://example.com" })).toMatch(
+      /ROLLUP_RPC_URL must be an http\(s\) URL/,
+    );
+    expect(problems({ ...base, ROLLUP_RPC_URL: "https://rollup.example.com/?token=k" })).toMatch(
+      /ROLLUP_RPC_URL must be an http\(s\) URL with no query string/,
+    );
+    expect(problems({ ...base, ROLLUP_RPC_URL: "http://rollup.example.com" })).toMatch(
+      /ROLLUP_RPC_URL must use https/,
     );
   });
 

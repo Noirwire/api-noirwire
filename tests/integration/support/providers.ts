@@ -6,8 +6,8 @@ import { ALL_STOCKS } from "../../../src/chain/core/tokenRegistry.js";
 import { LEND_RECEIPT_MINT } from "../../../src/relayer/core/relayed.js";
 import {
   mintAccount,
-  PYTH_ACCOUNT,
-  pythAccount,
+  MAGICBLOCK_ACCOUNT,
+  magicblockAccount,
   rentOf,
   USDC,
 } from "../../support/transactions.js";
@@ -55,7 +55,7 @@ function readBody(req: IncomingMessage): Promise<string> {
 
 type RpcCall = { id: unknown; method: string; params?: unknown[] };
 
-/** The chain as the API reads it for itself: Pyth's price account, the mints it sizes accounts for, and rent. */
+/** The chain as the API reads it for itself: MagicBlock's price account, the mints it sizes accounts for, and rent. */
 function chainAnswer(call: RpcCall, state: { solPrice: number | null }): Reply {
   const result = (value: unknown) => ({ body: { jsonrpc: "2.0", id: call.id, result: value } });
   if (call.method === "getMinimumBalanceForRentExemption") {
@@ -64,10 +64,10 @@ function chainAnswer(call: RpcCall, state: { solPrice: number | null }): Reply {
   if (call.method === "getAccountInfo") {
     const address = call.params?.[0] as string;
     const account =
-      address === PYTH_ACCOUNT
+      address === MAGICBLOCK_ACCOUNT
         ? state.solPrice === null
           ? null
-          : pythAccount(state.solPrice, 5)
+          : magicblockAccount(state.solPrice, 5)
         : address === USDC.toBase58() || address === LEND_RECEIPT_MINT.toBase58()
           ? mintAccount(TOKEN_PROGRAM_ID, 6)
           : ALL_STOCKS.some((stock) => stock.mint.toBase58() === address)

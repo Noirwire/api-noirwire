@@ -1,11 +1,12 @@
 # Environment
 
-Read once at start-up by `src/config/core/config.ts`; anything missing or malformed stops the start and names the variable. "On Railway" means `RAILWAY_ENVIRONMENT_NAME` is set, which Railway does itself.
+Read once at start-up by `src/config/core/config.ts`; anything missing or malformed stops the start and names the variable. "On Railway" means `RAILWAY_ENVIRONMENT_NAME` is set, which Railway does itself. On the k3s cluster that variable is not set, so the infra repo sets `SOLANA_NETWORK` and `TRUSTED_PROXY_HOPS=1` explicitly (the edge nginx sets `X-Real-IP`).
 
 | Variable                                          | Required or default                            | Meaning                                                                                                       |
 | ------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `SOLANA_NETWORK`                                  | Required; `mainnet` on Railway                 | `mainnet` or `devnet`.                                                                                        |
 | `SOLANA_RPC_URL`                                  | Required on mainnet; public endpoint on devnet | The RPC provider, key included.                                                                               |
+| `ROLLUP_RPC_URL`                                  | Unset: no SOL price, the relayer answers 503   | The RPC of the rollup that holds MagicBlock's SOL/USD price account. https, with no query string.             |
 | `SUPABASE_URL`                                    | Required                                       | The Supabase project that issues the sessions.                                                                |
 | `SUPABASE_PUBLISHABLE_KEY`                        | Required                                       | That project's publishable key.                                                                               |
 | `ALLOWED_ORIGINS`                                 | Required                                       | The exact origins that may call from a browser, comma separated.                                              |

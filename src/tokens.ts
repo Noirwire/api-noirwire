@@ -5,6 +5,7 @@ export const QUOTAS = Symbol("QUOTAS");
 export const SPEND = Symbol("SPEND");
 export const RELAY = Symbol("RELAY");
 export const CHAIN = Symbol("CHAIN");
+export const ROLLUP_CHAIN = Symbol("ROLLUP_CHAIN");
 export const VERIFIER = Symbol("VERIFIER");
 export const SESSIONS = Symbol("SESSIONS");
 export const RELAYER = Symbol("RELAYER");
